@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function About() {
   return (
     <div className="bg-none text-gray-900 font-sans">
-      <header className="relative bg-transparent text-white py-24 px-8 text-center overflow-hidden">
+      <header className="bg-transparent text-white pt-2 pb-10 px-8 text-center overflow-hidden">
         <h1 className="text-5xl font-extrabold mb-4">About Me</h1>
         <p className="text-xl max-w-3xl mx-auto font-light">
           I'm Patrick Tran, a Software Engineer driven by curiosity and a love

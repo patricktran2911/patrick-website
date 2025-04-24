@@ -27,8 +27,8 @@ export const metadata: Metadata = {
 
 export default function Skills() {
   return (
-    <div className="bg-none text-gray-900 h-full font-sans">
-      <header className="bg-transparent text-white py-24 px-8 text-center overflow-hidden">
+    <div className="flex-col bg-none text-gray-900 h-full justify-items-center-safe pb-50 font-sans">
+      <header className="bg-transparent text-white pt-2 pb-10 px-8 text-center overflow-hidden">
         <h1 className="text-5xl font-extrabold mb-4">My Skills</h1>
         <p className="text-xl max-w-3xl mx-auto font-light">
           A collection of tools, languages, and technologies I’ve mastered to
@@ -37,12 +37,12 @@ export default function Skills() {
         </p>
       </header>
 
-      <main className="flex-col bg-gray-300 hover:opacity-100 opacity-90 px-8 py-20 mx-44 space-y-20 transition-opacity duration-300">
+      <main className="flex-col bg-gray-300 hover:opacity-100 opacity-90 px-8 py-10 w-1/2 transition-opacity duration-300">
         <section>
-          <h2 className="md:text-sm lg:text-xl 2xl:text-3xl font-bold mb-6">
+          <h2 className="xs:text-xs md:text-sm 2xl:text-lg xxl:text-xl  font-bold py-6">
             Languages & Frameworks
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-lg">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-xs md:text-sm 2xl:text-md xxl:text-lg">
             <div className="flex items-center gap-2">
               <SiJavascript /> JavaScript
             </div>
@@ -77,10 +77,10 @@ export default function Skills() {
         </section>
 
         <section>
-          <h2 className="md:text-sm lg:text-xl 2xl:text-3xl font-bold mb-6">
+          <h2 className="xs:text-xs md:text-sm 2xl:text-lg xxl:text-xl font-bold py-6">
             Databases & Cloud
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-lg">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-xs md:text-sm 2xl:text-md xxl:text-lg">
             <div className="flex items-center gap-2">
               <SiPostgresql /> SQL
             </div>
@@ -97,10 +97,10 @@ export default function Skills() {
         </section>
 
         <section>
-          <h2 className="md:text-sm lg:text-xl 2xl:text-3xl font-bold mb-6">
+          <h2 className="xs:text-xs md:text-sm 2xl:text-lg xxl:text-xl font-bold py-6">
             Tools & Design
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-lg">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-xs md:text-sm 2xl:text-md xxl:text-lg">
             <div className="flex items-center gap-2">
               <SiGithub /> Git / GitHub
             </div>

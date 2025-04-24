@@ -45,7 +45,7 @@ export default function RootLayout({
           Your browser does not support the video tag.
         </video>
 
-        <nav className=" absolute z-90 min-w-screen px-8 py-6 flex justify-between items-center border-b text-black border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
+        <nav className="sticky z-90 min-w-screen px-8 py-6 flex justify-between items-center border-b text-black border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
           <div className="text-2xl font-bold">
             <a href="/">Patrick Tran</a>
           </div>
@@ -68,12 +68,18 @@ export default function RootLayout({
             >
               Skills
             </a>
-            <li className="cursor-pointer hover:text-blue-500 transition-colors">
+            <a
+              href="/resume"
+              className="cursor-pointer hover:text-blue-500 transition-colors"
+            >
               Resume
-            </li>
-            <li className="cursor-pointer hover:text-blue-500 transition-colors">
+            </a>
+            <a
+              href="/contact"
+              className="cursor-pointer hover:text-blue-500 transition-colors"
+            >
               Contact
-            </li>
+            </a>
           </ul>
         </nav>
 
