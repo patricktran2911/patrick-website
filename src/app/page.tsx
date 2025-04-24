@@ -1,103 +1,49 @@
-import Image from "next/image";
-
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="flex-col bg-transparent text-gray-900 min-h-[680px] min-w-64 overflow-hidden font-sans">
+      <header className="py-20 px-8 text-center bg-transparent">
+        <h1 className="text-5xl font-extrabold mb-4 text-white">
+          Hi, I'm Patrick Tran
+        </h1>
+        <p className="text-xl font-light text-white">
+          Detail-oriented Software Engineer experienced in full-stack web and
+          mobile applications, specializing in TypeScript, React, Swift, Python,
+          and AI-integrated solutions.
+        </p>
+        <div className="mt-10 flex justify-center gap-4">
+          <button className="px-6 py-3 bg-blue-700 text-white rounded-lg hover:bg-blue-400 hover:shadow-2xl transition-shadow duration-200">
+            View Projects
+          </button>
+          <button className="px-6 py-3 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-200 hover:shadow-2xl transition-shadow duration-200">
+            Get in Touch
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </header>
+
+      <section className="flex py-16 px-8 border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
+            <h3 className="text-2xl font-semibold">Full-Stack Development</h3>
+            <p className="mt-4">
+              Developing scalable web solutions with React, NextJS, Node.js, and
+              FastAPI.
+            </p>
+          </div>
+          <div className="p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
+            <h3 className="text-2xl font-semibold">Mobile App Development</h3>
+            <p className="mt-4">
+              Crafting modular iOS applications using SwiftUI and UIKit.
+            </p>
+          </div>
+          <div className="p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
+            <h3 className="text-2xl font-semibold">AI & Computer Vision</h3>
+            <p className="mt-4">
+              Integrating real-time AI solutions using Python, OpenCV, and
+              MediaPipe.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
