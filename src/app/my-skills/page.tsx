@@ -42,7 +42,7 @@ export default function Skills() {
           <h2 className="xs:text-xs md:text-sm 2xl:text-lg xxl:text-xl  font-bold py-6">
             Languages & Frameworks
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-xs md:text-sm 2xl:text-md xxl:text-lg">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-sm md:text-md 2xl:text-lg xxl:text-xl">
             <div className="flex items-center gap-2">
               <SiJavascript /> JavaScript
             </div>
@@ -80,7 +80,7 @@ export default function Skills() {
           <h2 className="xs:text-xs md:text-sm 2xl:text-lg xxl:text-xl font-bold py-6">
             Databases & Cloud
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-xs md:text-sm 2xl:text-md xxl:text-lg">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-sm md:text-md 2xl:text-lg xxl:text-xl">
             <div className="flex items-center gap-2">
               <SiPostgresql /> SQL
             </div>
@@ -100,7 +100,7 @@ export default function Skills() {
           <h2 className="xs:text-xs md:text-sm 2xl:text-lg xxl:text-xl font-bold py-6">
             Tools & Design
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-xs md:text-sm 2xl:text-md xxl:text-lg">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 xs:text-sm md:text-md 2xl:text-lg xxl:text-xl">
             <div className="flex items-center gap-2">
               <SiGithub /> Git / GitHub
             </div>
