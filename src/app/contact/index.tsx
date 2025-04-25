@@ -32,59 +32,59 @@ export default function Page() {
   return (
     <div className="bg-none text-gray-900 font-sans">
       <header className="bg-transparent text-white pt-2 pb-10 px-8 text-center overflow-hidden">
-        <h1 className="text-5xl font-extrabold mb-4">Get in Touch</h1>
+        <h1 className="text-5xl font-extrabold mb-4">{`Get in Touch`}</h1>
         <p className="text-xl max-w-3xl mx-auto font-light">
-          Whether you're looking to collaborate, ask questions, or just say hi —
-          I'm always open to meaningful connections.
+          {`Whether you're looking to collaborate, ask questions, or just say hi —
+          I'm always open to meaningful connections.`}
         </p>
       </header>
 
       <main className="bg-gray-300 hover:opacity-100 opacity-90 px-8 py-20 max-w-5xl mx-auto space-y-16 transition-opacity duration-300">
         <section>
-          <h2 className="text-3xl font-bold mb-4">Contact Info</h2>
+          <h2 className="text-3xl font-bold mb-4">{`Contact Info`}</h2>
           <ul className="space-y-4">
             <li>
-              <strong>Email:</strong>{" "}
+              <strong>{`Email:`}</strong>{" "}
               <a
                 href="mailto:patricktran291197@gmail.com"
                 className="text-blue-600 hover:underline"
               >
-                patricktran291197@gmail.com
+                {`patricktran291197@gmail.com`}
               </a>
             </li>
             <li>
-              <strong>Phone:</strong>{" "}
+              <strong>{`Phone:`}</strong>{" "}
               <a
                 href="tel:+19162608485"
                 className="text-blue-600 hover:underline"
               >
-                (916) 260-8485
+                {`(916) 260-8485`}
               </a>
             </li>
             <li>
-              <strong>LinkedIn:</strong>{" "}
+              <strong>{`LinkedIn:`}</strong>{" "}
               <a
                 href="https://linkedin.com/in/patrick-tran-99768828a"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:underline"
               >
-                linkedin.com/in/patrick-tran-99768828a
+                {`linkedin.com/in/patrick-tran-99768828a`}
               </a>
             </li>
           </ul>
         </section>
 
         <section>
-          <h2 className="text-3xl font-bold mb-4">Send a Message</h2>
+          <h2 className="text-3xl font-bold mb-4">{`Send a Message`}</h2>
           {submitted ? (
             <p className="text-green-600 font-semibold">
-              Thanks for your message! I'll get back to you soon.
+              {`Thanks for your message! I'll get back to you soon.`}
             </p>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block mb-2 font-medium">Name</label>
+                <label className="block mb-2 font-medium">{`Name`}</label>
                 <input
                   type="text"
                   name="name"
@@ -95,7 +95,7 @@ export default function Page() {
                 />
               </div>
               <div>
-                <label className="block mb-2 font-medium">Email</label>
+                <label className="block mb-2 font-medium">{`Email`}</label>
                 <input
                   type="email"
                   name="email"
