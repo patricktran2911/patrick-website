@@ -21,7 +21,7 @@ export default function Resume() {
           <h2 className="text-3xl font-bold mb-4">Resume Preview</h2>
           <iframe
             src="/Assets/pdf/Patrick's-Resume.pdf"
-            className="w-full 2xl:h-[700px] xxl:h-[800px] border rounded-lg shadow-lg"
+            className="w-full h-[80vh] border rounded-lg shadow-lg"
             title="Patrick Tran Resume Preview"
             contentEditable="false"
           ></iframe>
