@@ -20,17 +20,18 @@ export default function Resume() {
         <section>
           <h2 className="text-3xl font-bold mb-4">Resume Preview</h2>
           <iframe
-            src="/Assets/pdf/Patrick's-Resume.pdf"
+            src="https://drive.google.com/file/d/1i_hw3HGp1htJ259xTeN7e6mxywjAXfAw/preview"
             className="w-full h-[80vh] border rounded-lg shadow-lg"
             title="Patrick Tran Resume Preview"
             contentEditable="false"
+            allow="autoplay"
           ></iframe>
         </section>
 
         <section>
           <h2 className="text-3xl font-bold mb-4">Download</h2>
           <a
-            href="https://drive.google.com/uc?export=download&id=1WUfF28ActreZn9ltSR7zg2Hr5pMWbHUy"
+            href="https://drive.google.com/uc?export=download&id=1i_hw3HGp1htJ259xTeN7e6mxywjAXfAw"
             className="inline-block px-6 py-3 mt-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200"
             download
           >
