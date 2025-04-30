@@ -20,24 +20,30 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="flex py-16 px-8 border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
+      <section className="flex py-3 sm:px-2 lg:py-16 lg:px-8 border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
         <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
-            <h3 className="text-2xl font-semibold">Full-Stack Development</h3>
-            <p className="mt-4">
+          <div className=" p-3 lg:p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
+            <h3 className="sm:text-lg lg:text-2xl font-semibold">
+              Full-Stack Development
+            </h3>
+            <p className="lg:text-lg text-sm mt-4">
               Developing scalable web solutions with React, NextJS, Node.js, and
               FastAPI.
             </p>
           </div>
-          <div className="p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
-            <h3 className="text-2xl font-semibold">Mobile App Development</h3>
-            <p className="mt-4">
+          <div className="p-3 lg:p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
+            <h3 className="sm:text-lg lg:text-2xl font-semibold">
+              Mobile App Development
+            </h3>
+            <p className="lg:text-lg text-sm mt-4">
               Crafting modular iOS applications using SwiftUI and UIKit.
             </p>
           </div>
-          <div className="p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
-            <h3 className="text-2xl font-semibold">AI & Computer Vision</h3>
-            <p className="mt-4">
+          <div className="p-3 lg:p-6 bg-white border-[2px] rounded-lg shadow hover:shadow-xl transition-shadow duration-300">
+            <h3 className="sm:text-lg lg:text-2xl font-semibold">
+              AI & Computer Vision
+            </h3>
+            <p className="lg:text-lg text-sm mt-4">
               Integrating real-time AI solutions using Python, OpenCV, and
               MediaPipe.
             </p>

@@ -33,8 +33,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen`}
       >
+        {/* Background video */}
         <video
-          className="absolute -z-10 min-w-screen h-full object-cover bg-amber-50"
+          className="absolute -z-10 w-full h-full object-cover bg-amber-50"
           autoPlay
           loop
           muted
@@ -46,52 +47,56 @@ export default function RootLayout({
           Your browser does not support the video tag.
         </video>
 
-        <nav className="sticky z-90 min-w-screen px-8 py-6 flex justify-between items-center border-b text-black border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
-          <div className="text-2xl font-bold">
-            <Link href="/">Patrick Tran</Link>
-          </div>
-          <ul className="flex space-x-6 text-lg">
-            <Link
-              href="/about"
-              className="cursor-pointer hover:text-blue-500 transition-colors"
-            >
-              About
-            </Link>
-            <Link
-              href="/projects"
-              className="cursor-pointer hover:text-blue-500 transition-colors"
-            >
-              Projects
-            </Link>
-            <Link
-              href="/my-skills"
-              className="cursor-pointer hover:text-blue-500 transition-colors"
-            >
-              Skills
-            </Link>
-            <Link
-              href="/resume"
-              className="cursor-pointer hover:text-blue-500 transition-colors"
-            >
-              Resume
-            </Link>
-            <Link
-              href="/contact"
-              className="cursor-pointer hover:text-blue-500 transition-colors"
-            >
-              Contact
-            </Link>
-          </ul>
-        </nav>
+        {/* Main layout */}
+        <div className="flex flex-col h-screen w-full sm:space-y-3 lg:space-y-4 ">
+          {/*Navbar*/}
+          <nav className="flex z-50 px-8 py-6 justify-between items-center border-b text-black border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
+            <div className="sm:text-lg lg:text-2xl font-bold">
+              <Link href="/">Patrick Tran</Link>
+            </div>
+            <ul className="flex space-x-6 sm:text-sm lg:text-lg">
+              <Link
+                href="/about"
+                className="cursor-pointer hover:text-blue-500 transition-colors"
+              >
+                About
+              </Link>
+              <Link
+                href="/projects"
+                className="cursor-pointer hover:text-blue-500 transition-colors"
+              >
+                Projects
+              </Link>
+              <Link
+                href="/my-skills"
+                className="cursor-pointer hover:text-blue-500 transition-colors"
+              >
+                Skills
+              </Link>
+              <Link
+                href="/resume"
+                className="cursor-pointer hover:text-blue-500 transition-colors"
+              >
+                Resume
+              </Link>
+              <Link
+                href="/contact"
+                className="cursor-pointer hover:text-blue-500 transition-colors"
+              >
+                Contact
+              </Link>
+            </ul>
+          </nav>
 
-        {/* Main content */}
-        <main className="flex-grow">{children}</main>
+          {/* Main content */}
+          <main className="flex-grow">{children}</main>
 
-        {/* Sticky footer */}
-        <footer className="absolute bottom-0 w-full text-center text-white py-4 bg-transparent">
-          © {new Date().getFullYear()} Patrick Tran. Built with NextJS,
-          TypeScript, TailwindCSS.
-        </footer>
+          {/* Sticky footer */}
+          <footer className="w-full text-center text-white bg-gradient-to-l from-black to-transparent text-sm md:text-lg lg:text-xl p-4">
+            © {new Date().getFullYear()} Patrick Tran. Built with NextJS,
+            TypeScript, TailwindCSS.
+          </footer>
+        </div>
       </body>
     </html>
   );

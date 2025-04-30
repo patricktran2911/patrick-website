@@ -8,10 +8,11 @@ export const metadata: Metadata = {
 
 export default function About() {
   return (
-    <div className="bg-none text-gray-900 font-sans">
-      <header className="bg-transparent text-white pt-2 pb-10 px-8 text-center overflow-hidden">
+    <div className="flex flex-col space-y-2 w-full h-full text-gray-900 font-sans">
+      {/*Container*/}
+      <header className="bg-transparent text-white text-center overflow-hidden">
         <h1 className="text-5xl font-extrabold mb-4">About Me</h1>
-        <p className="text-xl max-w-3xl mx-auto font-light">
+        <p className="text-xl sm:max-w-5xl lg:max-w-3xl mx-auto font-light">
           {`I'm Patrick Tran, a Software Engineer driven by curiosity and a love
           for elegant, practical code. My work spans mobile development,
           full-stack applications, and intelligent systems powered by computer
