@@ -102,7 +102,7 @@ export default function Resume() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="relative w-full max-w-lg md:max-w-2xl lg:max-w-5xl h-[40vh] md:h-[70vh] lg:h-[90vh] bg-white rounded-lg shadow-lg overflow-hidden"
+              className="relative w-full max-w-lg md:max-w-2xl lg:max-w-5xl h-[100vh] md:h-[70vh] lg:h-[90vh] bg-white  rounded-lg shadow-lg overflow-hidden"
             >
               {/* Close Button */}
               <button
@@ -114,9 +114,10 @@ export default function Resume() {
 
               {/* PDF in iframe */}
               <iframe
-                src="/Assets/pdf/Patrick's-Resume-v2.pdf"
-                className="w-full h-full max-h-screen object-contain"
+                src="/Assets/pdf/Patrick's-Resume-v2.pdf#view=FitH"
+                className="w-full h-full border-none"
                 title="Resume Fullscreen"
+                content="application/pdf"
               ></iframe>
             </motion.div>
           </motion.div>
