@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
+import Navbar from "@/reusable-components/NavBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased relative max-h-dvh max-w-dvw`}
       >
         {/* Background video */}
         <video
@@ -49,44 +50,7 @@ export default function RootLayout({
 
         {/* Main layout */}
         <div className="flex flex-col h-screen w-full sm:space-y-3 lg:space-y-4 ">
-          {/*Navbar*/}
-          <nav className="flex z-50 px-8 py-6 justify-between items-center border-b text-black border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300">
-            <div className="sm:text-lg lg:text-2xl font-bold">
-              <Link href="/">Patrick Tran</Link>
-            </div>
-            <ul className="flex space-x-6 sm:text-sm lg:text-lg">
-              <Link
-                href="/about"
-                className="cursor-pointer hover:text-blue-500 transition-colors"
-              >
-                About
-              </Link>
-              <Link
-                href="/projects"
-                className="cursor-pointer hover:text-blue-500 transition-colors"
-              >
-                Projects
-              </Link>
-              <Link
-                href="/my-skills"
-                className="cursor-pointer hover:text-blue-500 transition-colors"
-              >
-                Skills
-              </Link>
-              <Link
-                href="/resume"
-                className="cursor-pointer hover:text-blue-500 transition-colors"
-              >
-                Resume
-              </Link>
-              <Link
-                href="/contact"
-                className="cursor-pointer hover:text-blue-500 transition-colors"
-              >
-                Contact
-              </Link>
-            </ul>
-          </nav>
+          <Navbar />
 
           {/* Main content */}
           <main className="flex-grow">{children}</main>
