@@ -1,6 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
 
 const sectionVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -8,10 +10,12 @@ const sectionVariants = {
 };
 
 export default function Resume() {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <div className="flex flex-col items-center bg-none text-gray-900 font-sans">
+    <div className="flex flex-col items-center text-gray-900 font-sans">
       {/* Header */}
-      <header className="bg-transparent text-white pt-12 pb-10 px-6 sm:px-8 text-center overflow-hidden">
+      <header className="bg-transparent text-white pt-12 pb-10 px-6 sm:px-8 text-center">
         <motion.h1
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -26,34 +30,34 @@ export default function Resume() {
           transition={{ duration: 0.8, delay: 0.4 }}
           className="text-lg sm:text-xl max-w-3xl mx-auto font-light"
         >
-          A glimpse into my background, skills, and experience. You can preview
-          it below or download the full PDF.
+          Tap the preview to view in full screen or download below.
         </motion.p>
       </header>
 
-      {/* Main Content */}
-      <main className="flex flex-col-reverse lg:flex-row justify-center items-center gap-8 px-6 sm:px-12 py-12 bg-gray-100 hover:lg:bg-gray-100/100 lg:bg-gray-100/70 w-3/4 transition-all duration-300">
-        {/* Resume Preview */}
+      {/* Main content */}
+      <main className="flex flex-col-reverse lg:flex-row justify-center items-center gap-8 px-6 sm:px-12 py-12 bg-gray-100 w-full max-w-5xl transition-all duration-300">
+        {/* Thumbnail Preview */}
         <motion.section
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.3 }}
+          viewport={{ once: true }}
           variants={sectionVariants}
           transition={{ duration: 0.6 }}
-          className="w-full max-w-4xl lg:w-3/5"
+          onClick={() => setIsOpen(true)}
+          className="cursor-pointer w-full max-w-md rounded-lg border shadow hover:shadow-xl transition"
         >
-          <iframe
-            src="/Assets/pdf/Patrick's-Resume-v2.pdf#zoom=FitH"
-            className="w-full aspect-[30/33] rounded-lg border shadow-lg"
-            title="Patrick Tran Resume Preview"
-          ></iframe>
+          <img
+            src="/Assets/images/resume-thumbnail.png"
+            alt="Resume thumbnail"
+            className="rounded w-full"
+          />
         </motion.section>
 
-        {/* Download + Info */}
+        {/* Download & Highlights */}
         <motion.section
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.3 }}
+          viewport={{ once: true }}
           variants={sectionVariants}
           transition={{ duration: 0.6, delay: 0.2 }}
           className="w-full max-w-md text-center lg:text-right"
@@ -81,6 +85,43 @@ export default function Resume() {
           </motion.a>
         </motion.section>
       </main>
+
+      {/* Fullscreen Modal */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsOpen(false)}
+          >
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="relative w-full max-w-lg md:max-w-2xl lg:max-w-5xl h-[40vh] md:h-[70vh] lg:h-[90vh] bg-white rounded-lg shadow-lg overflow-hidden"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setIsOpen(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              >
+                <X size={28} />
+              </button>
+
+              {/* PDF in iframe */}
+              <iframe
+                src="/Assets/pdf/Patrick's-Resume-v2.pdf"
+                className="w-full h-full max-h-screen object-contain"
+                title="Resume Fullscreen"
+              ></iframe>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

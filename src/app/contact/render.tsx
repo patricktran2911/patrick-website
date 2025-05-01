@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { sendForm } from "emailjs-com";
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
@@ -15,19 +16,15 @@ export default function Contact() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (res.ok) {
-        setSubmitted(true);
-        setForm({ name: "", email: "", message: "" });
-      }
-    } catch (error) {
-      console.error("Message failed", error);
-    }
+    sendForm(
+      "service_nt4r3gp",
+      "template_2fa157s",
+      e.target as HTMLFormElement,
+      "61MNx-0wj6lZewpbw"
+    ).finally(() => {
+      setSubmitted(true);
+      setForm({ name: "", email: "", message: "" });
+    });
   };
 
   const variants = {
@@ -76,15 +73,10 @@ export default function Contact() {
                 patricktran291197@gmail.com
               </a>
             </li>
-            <li>
-              <strong>Phone:</strong>{" "}
-              <a
-                href="tel:+19162608485"
-                className="text-blue-600 hover:underline"
-              >
-                (916) 260-8485
-              </a>
-            </li>
+            <p className="text-black">
+              <strong>Location:</strong>
+              {" Sacramento, CA, United States"}
+            </p>
             <li>
               <strong>LinkedIn:</strong>{" "}
               <a
@@ -114,7 +106,8 @@ export default function Contact() {
               transition={{ duration: 0.5 }}
               className="text-green-600 font-semibold"
             >
-              Thanks for your message! I'll get back to you soon.
+              Thanks for your message and appreciate for your time to look at my
+              website! I will get back to you as soon as possible.
             </motion.p>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
