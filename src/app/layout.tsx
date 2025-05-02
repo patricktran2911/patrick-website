@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Link from "next/link";
+import bg_thumbnail from "images/background-thumbnail.png";
 import Navbar from "@/reusable-components/NavBar";
 
 const geistSans = Geist({
@@ -42,7 +42,7 @@ export default function RootLayout({
           muted
           playsInline
           preload="none"
-          poster="https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=MnwzNjUyOXwwfDF8c2VhcmNofDJ8fG1vYmlsZXxlbnwwfHx8fDE2OTI3NzQ5NTg&ixlib=rb-4.0.3&q=80&w=1080"
+          poster={bg_thumbnail.src}
         >
           <source src={"/Assets/videos/bg-video1.mp4"} type="video/mp4" />
           Your browser does not support the video tag.
