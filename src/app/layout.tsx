@@ -48,12 +48,14 @@ export default function RootLayout({
           Your browser does not support the video tag.
         </video>
 
+        <div className="absolute inset-0 -z-1 bg-black/70" />
+
         {/* Main layout */}
         <div className="flex flex-col h-screen w-full sm:space-y-3 lg:space-y-4 ">
           <Navbar />
 
           {/* Main content */}
-          <main className="flex-grow">{children}</main>
+          <main className="flex-grow z-20">{children}</main>
 
           {/* Sticky footer */}
           <footer className="w-full text-center text-white bg-gradient-to-l from-black to-transparent text-sm md:text-lg lg:text-xl p-4">
