@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+// Make sure this path to your poster image is correct
 import bg_thumbnail from "images/background-thumbnail.png";
 import Navbar from "@/reusable-components/NavBar";
 
@@ -40,11 +41,11 @@ export default function RootLayout({
           loop
           muted
           playsInline
-          preload="none"
+          preload="auto"
           poster={bg_thumbnail.src}
         >
-          <source src={"/Assets/videos/bg-video1.mp4"} type="video/mp4" />
-          Your browser does not support the video tag.
+          <source src={"/assets/videos/bg-video1.webm"} type="video/webm" />
+          <source src={"/assets/videos/bg-video1.mp4"} type="video/mp4" />
         </video>
 
         <div className="absolute inset-0 -z-1 bg-black/70" />
