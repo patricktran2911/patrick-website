@@ -2,10 +2,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { sendForm } from "emailjs-com";
+import Modal from "@/reusable-components/Modal";
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -16,12 +18,14 @@ export default function Contact() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSending(true);
     sendForm(
       "service_nt4r3gp",
       "template_2fa157s",
       e.target as HTMLFormElement,
       "61MNx-0wj6lZewpbw"
     ).finally(() => {
+      setIsSending(false);
       setSubmitted(true);
       setForm({ name: "", email: "", message: "" });
     });
@@ -34,6 +38,7 @@ export default function Contact() {
 
   return (
     <div className="bg-none text-gray-900 font-sans">
+      {isSending && <Modal />}
       <header className="bg-transparent text-white pt-2 pb-10 px-8 text-center overflow-hidden">
         <motion.h1
           initial={{ opacity: 0, y: -30 }}

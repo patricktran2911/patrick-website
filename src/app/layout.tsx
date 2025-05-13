@@ -41,11 +41,11 @@ export default function RootLayout({
           loop
           muted
           playsInline
-          preload="metadata"
+          preload="none"
           poster={bg_thumbnail.src}
         >
           <source src={"/assets/videos/bg-video1.webm"} type="video/webm" />
-          {/* <source src={"/assets/videos/bg-video1.mp4"} type="video/mp4" /> */}
+          <source src={"/assets/videos/bg-video1.mp4"} type="video/mp4" />
         </video>
 
         <div className="absolute inset-0 -z-1 bg-black/70" />
