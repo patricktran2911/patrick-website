@@ -1,6 +1,6 @@
 # Patrick Tran's Personal Website
 
-![My Website Preview]()
+![My Website Preview](./public/Assets/readme/DEMO.gif)
 
 This repository contains the source code for my personal portfolio website, showcasing my projects, skills, and blog.
 
