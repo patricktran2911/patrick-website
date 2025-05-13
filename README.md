@@ -10,7 +10,7 @@ This repository contains the source code for my personal portfolio website, show
 
 - Modern and responsive design
 - Sections for About Me, Projects, Blog, Contact
-- Fast loading times (we're working on it! 😉)
+- Fast loading times
 - Built with the latest web technologies
 
 ## 🛠️ Tech Stack
