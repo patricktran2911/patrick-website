@@ -36,7 +36,7 @@ const projects = [
       "An offline-first, accessible citizenship study app for iOS, helping users master the U.S. naturalization test with flashcards, bilingual support, adaptive quizzes, and personalized progress tracking.",
     tech: ["SwiftUI", "Combine", "CoreData", "UIKit", "In-App Purchase"],
     link: "https://apps.apple.com/us/app/iusc/id6745776441",
-    icon: "/Assets/images/iusc-icon.png",
+    icon: "/Assets/images/iUSC-icon.png",
     logoBackground: "bg-[#969798]",
   },
 ];
