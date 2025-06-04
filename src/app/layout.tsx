@@ -31,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased relative max-h-dvh max-w-dvw`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased relative max-h-screen max-w-dvw`}
       >
         {/* Background video */}
         <video
@@ -50,11 +50,11 @@ export default function RootLayout({
         <div className="absolute inset-0 -z-1 bg-black/70" />
 
         {/* Main layout */}
-        <div className="flex flex-col h-screen w-full sm:space-y-3 lg:space-y-4 ">
+        <div className="flex flex-col h-screen w-full z-20 ">
           <Navbar />
 
           {/* Main content */}
-          <main className="flex-grow z-20">{children}</main>
+          <main className="flex-1 overflow-auto">{children}</main>
 
           {/* Sticky footer */}
           <footer className="w-full text-center text-white bg-gradient-to-l from-black to-transparent text-sm md:text-lg lg:text-xl p-4">

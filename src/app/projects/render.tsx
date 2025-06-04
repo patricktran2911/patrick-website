@@ -43,7 +43,7 @@ const projects = [
 
 export default function Projects() {
   return (
-    <section className="min-h-screen py-16 px-4 sm:px-6 md:px-12 bg-transparent overflow-hidden">
+    <div className="h-full py-16 px-4 sm:px-6 md:px-12 bg-transparent overflow-y-auto">
       {/* Page Heading */}
       <motion.h1
         initial={{ opacity: 0, y: -30 }}
@@ -192,6 +192,6 @@ export default function Projects() {
           elegant code.
         </p>
       </motion.div>
-    </section>
+    </div>
   );
 }
