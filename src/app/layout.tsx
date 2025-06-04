@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-// Make sure this path to your poster image is correct
 import bg_thumbnail from "images/background-thumbnail.png";
 import Navbar from "@/reusable-components/NavBar";
 
