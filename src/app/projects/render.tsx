@@ -120,7 +120,7 @@ export default function Projects() {
                   <img
                     src={project.icon}
                     alt={`${project.title} icon`}
-                    className="w-10 h-10 object-contain"
+                    className="w-10 h-10 object-contain rounded-full"
                     draggable={false}
                   />
                 </div>

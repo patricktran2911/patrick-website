@@ -57,11 +57,11 @@ export default function RootLayout({
           <main className="flex-1 overflow-auto">{children}</main>
 
           {/* Sticky footer */}
-          <footer className="w-full text-center text-white bg-gradient-to-l from-black to-transparent text-sm md:text-lg lg:text-xl p-4">
-            © {new Date().getFullYear()} Patrick Tran. Built with NextJS,
-            TypeScript, TailwindCSS.
-          </footer>
         </div>
+        <footer className="absolute bottom-0 w-full text-center text-white bg-gradient-to-l from-black to-transparent text-sm md:text-lg lg:text-xl p-4">
+          © {new Date().getFullYear()} Patrick Tran. Built with NextJS,
+          TypeScript, TailwindCSS.
+        </footer>
       </body>
     </html>
   );
