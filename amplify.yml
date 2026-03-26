@@ -3,9 +3,10 @@ frontend:
   phases:
     preBuild:
       commands:
-        # Use npm install (not npm ci) so platform-native binaries
-        # for linux-x64 are resolved fresh, regardless of which OS
-        # generated the lock file (lightningcss, @tailwindcss/oxide, sharp).
+        # Wipe any cached node_modules — may contain Windows-platform native
+        # binaries (@tailwindcss/oxide, lightningcss, sharp) that break on Linux.
+        # Install fresh so CodeBuild resolves the correct linux-x64 binaries.
+        - rm -rf node_modules
         - npm install --include=optional
     build:
       commands:
@@ -16,5 +17,6 @@ frontend:
       - '**/*'
   cache:
     paths:
+      # Only cache Next.js compiler output — node_modules is platform-specific
+      # and must NOT be cached across Windows dev → Linux build environments.
       - .next/cache/**/*
-      - node_modules/**/*
