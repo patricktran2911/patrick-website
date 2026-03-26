@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import bg_thumbnail from "images/background-thumbnail.png";
 import Navbar from "@/reusable-components/NavBar";
+import FloatingChat from "@/reusable-components/FloatingChat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,8 +45,14 @@ export default function RootLayout({
           preload="none"
           poster={bg_thumbnail.src}
         >
-          <source src="/Assets/videos/bg-video1.webm" type="video/webm" />
-          <source src="/Assets/videos/bg-video1.mp4" type="video/mp4" />
+          <source
+            src="/Assets/videos/bg-video1.webm"
+            type="video/webm; codecs=vp9"
+          />
+          <source
+            src="/Assets/videos/bg-video1.mp4"
+            type="video/mp4; codecs=avc1.4D401E"
+          />
         </video>
 
         {/* Dark overlay */}
@@ -56,6 +63,7 @@ export default function RootLayout({
           <Navbar />
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
+        <FloatingChat />
       </body>
     </html>
   );

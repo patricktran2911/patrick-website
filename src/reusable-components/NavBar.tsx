@@ -12,7 +12,6 @@ const routes = [
   { path: "/my-skills", label: "Skills" },
   { path: "/resume", label: "Resume" },
   { path: "/contact", label: "Contact" },
-  { path: "/chat", label: "AI Chat" },
 ];
 
 export default function Navbar() {

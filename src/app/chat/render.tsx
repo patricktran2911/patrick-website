@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Trash2, Settings2, ChevronDown } from "lucide-react";
 import PageWrapper from "@/reusable-components/PageWrapper";
 
-const BASE_URL = "https://ai-dev.patrickcs-web.com";
+const BASE_URL = process.env.NEXT_PUBLIC_AI_API_URL ?? "https://ai-dev.patrickcs-web.com";
 
 type Role = "user" | "assistant";
 type Mode = "stream" | "sync";
@@ -242,7 +242,7 @@ export default function Chat() {
             Patrick AI / Trợ Lý AI
           </h1>
           <p className="text-xs text-white/40 truncate">
-            This is an AI representation for me - It trained on my resume, projects, and profile to answer questions about my background and experience. It can also chat in Vietnamese!
+            This is an AI representation for me - it was trained on my resume, projects, and profile to answer questions about my background and experience. It can also chat in Vietnamese!
           </p>
         </div>
 

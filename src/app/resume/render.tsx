@@ -5,10 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, Maximize2 } from "lucide-react";
 import PageWrapper from "@/reusable-components/PageWrapper";
 
-const RESUME_DOWNLOAD =
-  "https://drive.google.com/uc?export=download&id=1wgqk3KyJd1mj3O02Swn9Hyf1jG6_iUYm";
-const RESUME_VIEW =
-  "https://drive.google.com/file/d/1wgqk3KyJd1mj3O02Swn9Hyf1jG6_iUYm/view";
+const RESUME_FILE_ID = "1wgqk3KyJd1mj3O02Swn9Hyf1jG6_iUYm";
+const RESUME_DOWNLOAD = `https://drive.google.com/uc?export=download&id=${RESUME_FILE_ID}`;
+const RESUME_VIEW = `https://drive.google.com/file/d/${RESUME_FILE_ID}/view`;
 
 const highlights = [
   "Full-stack development with React, Next.js, FastAPI",
