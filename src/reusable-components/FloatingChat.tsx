@@ -461,8 +461,8 @@ export default function FloatingChat() {
         )}
       </AnimatePresence>
 
-      {/* ── FAB button ─────────────────────────────────────────── */}
-      <div className="fixed bottom-6 right-4 sm:right-6 z-50">
+      {/* ── FAB button — hidden on mobile when chat is open (header has close btn) */}
+      <div className={`fixed bottom-6 right-4 sm:right-6 z-50 ${open ? "hidden sm:block" : ""}`}>
         {/* Pulse ring */}
         {!open && (
           <motion.div
