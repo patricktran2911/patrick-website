@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { sendForm } from "emailjs-com";
 import { Mail, MapPin, Linkedin } from "lucide-react";
+import { Turnstile } from "@marsidev/react-turnstile";
 import Modal from "@/reusable-components/Modal";
 import PageWrapper from "@/reusable-components/PageWrapper";
 
@@ -20,6 +21,8 @@ export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -30,7 +33,27 @@ export default function Contact() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!turnstileToken) {
+      setCaptchaError("Please complete the bot verification.");
+      return;
+    }
     setIsSending(true);
+    try {
+      const res = await fetch("/api/verify-captcha", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+      if (!res.ok) {
+        setCaptchaError("Bot verification failed. Please refresh and try again.");
+        setIsSending(false);
+        return;
+      }
+    } catch {
+      setCaptchaError("Verification request failed. Please try again.");
+      setIsSending(false);
+      return;
+    }
     sendForm(
       EMAILJS_SERVICE,
       EMAILJS_TEMPLATE,
@@ -176,11 +199,33 @@ export default function Contact() {
                   )}
                 </motion.div>
               ))}
+              <div className="flex flex-col items-center gap-2">
+                <Turnstile
+                  siteKey={
+                    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ??
+                    "1x00000000000000000000AA"
+                  }
+                  onSuccess={(token) => {
+                    setTurnstileToken(token);
+                    setCaptchaError(null);
+                  }}
+                  onExpire={() => setTurnstileToken(null)}
+                  onError={() => {
+                    setTurnstileToken(null);
+                    setCaptchaError("Bot check failed. Please refresh.");
+                  }}
+                  options={{ theme: "dark" }}
+                />
+                {captchaError && (
+                  <p className="text-red-400 text-xs text-center">{captchaError}</p>
+                )}
+              </div>
               <motion.button
                 type="submit"
-                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/30"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={{ scale: turnstileToken ? 1.02 : 1 }}
+                whileTap={{ scale: turnstileToken ? 0.98 : 1 }}
+                disabled={!turnstileToken}
               >
                 Send Message
               </motion.button>
