@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import bg_thumbnail from "images/background-thumbnail.png";
 import Navbar from "@/reusable-components/NavBar";
 import FloatingChat from "@/reusable-components/FloatingChat";
 
@@ -43,7 +42,7 @@ export default function RootLayout({
           muted
           playsInline
           preload="none"
-          poster={bg_thumbnail.src}
+          poster="/Assets/images/background-thumbnail.png"
         >
           <source
             src="/Assets/videos/bg-video1.webm"
