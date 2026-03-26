@@ -1,96 +1,153 @@
 "use client";
-import { motion } from "framer-motion";
 
-const sectionVariants = {
-  hidden: { opacity: 0, y: 30 },
+import { motion } from "framer-motion";
+import PageWrapper from "@/reusable-components/PageWrapper";
+
+const fade = {
+  hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0 },
 };
 
+const journey = [
+  {
+    period: "2025 – Present",
+    title: "Full-Stack Developer @ NeuroSpring",
+    desc: "Building real-time camera streaming and AI classification systems for ambulance-based clinical research.",
+  },
+  {
+    period: "2024 – 2025",
+    title: "iOS Developer @ FanFly",
+    desc: "Developed the first modular SwiftUI app connecting artists and fans with reusable UI components.",
+  },
+  {
+    period: "2023 – 2024",
+    title: "iOS Developer @ Scoop",
+    desc: "Implemented features using SwiftUI and UIKit, integrating APIs with PromiseKit and Alamofire.",
+  },
+];
+
+const techStack = [
+  "React / Next.js",
+  "TypeScript / JavaScript",
+  "Swift (SwiftUI, UIKit)",
+  "FastAPI / Node.js",
+  "Python / OpenCV / MediaPipe",
+  "SQL / NoSQL / Supabase",
+];
+
 export default function About() {
   return (
-    <div className="flex flex-col space-y-2 w-full h-full text-gray-900 font-sans">
-      <header className="bg-transparent text-white text-center overflow-hidden py-8">
+    <PageWrapper className="min-h-full">
+      {/* Header */}
+      <header className="text-center px-6 pt-12 pb-8">
         <motion.h1
-          initial={{ opacity: 0, y: -40 }}
+          initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-5xl font-extrabold mb-4"
+          transition={{ duration: 0.7 }}
+          className="text-4xl sm:text-5xl font-extrabold text-white mb-4"
         >
           About Me
         </motion.h1>
         <motion.p
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-xl sm:max-w-5xl lg:max-w-3xl mx-auto font-light"
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="text-lg text-white/70 max-w-2xl mx-auto font-light"
         >
-          I'm Patrick Tran, a Software Engineer driven by curiosity and a love
-          for elegant, practical code. My work spans mobile development,
+          I&apos;m Patrick Tran, a Software Engineer driven by curiosity and a
+          love for elegant, practical code. My work spans mobile development,
           full-stack applications, and intelligent systems powered by computer
           vision and AI.
         </motion.p>
       </header>
 
-      <main className="bg-gray-300 hover:opacity-100 lg:opacity-90 px-8 py-4 max-w-5xl mx-auto space-y-8 transition-opacity duration-300">
-        {["My Journey", "Tech Stack", "Beyond the Code"].map((title, idx) => (
-          <motion.section
-            key={title}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ duration: 0.6, delay: idx * 0.2 }}
-            variants={sectionVariants}
-          >
-            <h2 className="text-xl lg:text-2xl font-bold mb-4">{title}</h2>
+      {/* Content */}
+      <div className="max-w-4xl mx-auto px-6 pb-20 space-y-10">
+        {/* Journey */}
+        <motion.section
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={fade}
+          transition={{ duration: 0.6 }}
+          className="glass rounded-2xl p-8"
+        >
+          <h2 className="text-2xl font-bold text-white mb-6">My Journey</h2>
+          <div className="space-y-6">
+            {journey.map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.15 }}
+                className="flex gap-4"
+              >
+                <div className="flex flex-col items-center">
+                  <div className="w-3 h-3 rounded-full bg-indigo-500 mt-1.5" />
+                  {i < journey.length - 1 && (
+                    <div className="w-px flex-1 bg-indigo-500/30 mt-1" />
+                  )}
+                </div>
+                <div className="pb-6">
+                  <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+                    {item.period}
+                  </span>
+                  <h3 className="text-white font-semibold mt-1">{item.title}</h3>
+                  <p className="text-white/60 text-sm mt-1 leading-relaxed">
+                    {item.desc}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.section>
 
-            {title === "My Journey" && (
-              <ul className="text-sm lg:text-[16px] space-y-6">
-                <li>
-                  <strong>2025–Present:</strong> Full-Stack Developer @
-                  NeuroSpring – Built a camera streaming platform for ambulances
-                  using React, FastAPI, OpenCV, and MediaPipe.
-                </li>
-                <li>
-                  <strong>2023–2024:</strong> iOS Developer @ FANFLY – Designed
-                  modular iOS components to speed up feature development.
-                </li>
-                <li>
-                  <strong>2023:</strong> iOS Intern @ Scoop Inc – Collaborated
-                  on SwiftUI/UIKit interfaces, and integrated REST APIs.
-                </li>
-                <li>
-                  <strong>2022–Present:</strong> CS Student @ California State
-                  University, Sacramento – Focused on AI, full-stack, and
-                  systems design.
-                </li>
-              </ul>
-            )}
+        {/* Tech Stack */}
+        <motion.section
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={fade}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="glass rounded-2xl p-8"
+        >
+          <h2 className="text-2xl font-bold text-white mb-4">Tech Stack</h2>
+          <div className="flex flex-wrap gap-3">
+            {techStack.map((tech, i) => (
+              <motion.span
+                key={tech}
+                initial={{ opacity: 0, scale: 0.8 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.3, delay: i * 0.06 }}
+                className="px-4 py-2 rounded-full text-sm font-medium text-indigo-300 bg-indigo-500/10 border border-indigo-500/20"
+              >
+                {tech}
+              </motion.span>
+            ))}
+          </div>
+        </motion.section>
 
-            {title === "Tech Stack" && (
-              <>
-                <p>Here’s what I use daily and love working with:</p>
-                <ul className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4 list-disc list-inside text-sm lg:text-[16px]">
-                  <li>React / Next.js</li>
-                  <li>TypeScript / JavaScript</li>
-                  <li>Swift (SwiftUI, UIKit)</li>
-                  <li>FastAPI / Node.js</li>
-                  <li>Python / OpenCV / MediaPipe</li>
-                  <li>SQL / NoSQL / Supabase</li>
-                </ul>
-              </>
-            )}
-
-            {title === "Beyond the Code" && (
-              <p className="text-sm lg:text-[16px]">
-                Outside of development, I enjoy building PCs, exploring local
-                trails, sipping hot tea while reading, and vibing to US-UK
-                music. I believe a balanced life fuels better creativity and
-                solutions.
-              </p>
-            )}
-          </motion.section>
-        ))}
-      </main>
-    </div>
+        {/* Beyond the Code */}
+        <motion.section
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={fade}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="glass rounded-2xl p-8"
+        >
+          <h2 className="text-2xl font-bold text-white mb-4">
+            Beyond the Code
+          </h2>
+          <p className="text-white/60 leading-relaxed">
+            Outside of development, I enjoy building PCs, exploring local
+            trails, sipping hot tea while reading, and vibing to US-UK music. I
+            believe a balanced life fuels better creativity and solutions.
+          </p>
+        </motion.section>
+      </div>
+    </PageWrapper>
   );
 }

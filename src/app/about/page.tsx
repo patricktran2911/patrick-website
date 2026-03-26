@@ -4,7 +4,7 @@ import About from "./render";
 export const metadata: Metadata = {
   title: "About | Patrick Tran",
   description:
-    "About Patrick Tran, Software Engineer with experience in full-stack development, mobile apps, and AI solutions.",
+    "Learn about Patrick Tran's journey as a Software Engineer in web, mobile, and AI.",
 };
 
 export default function Page() {

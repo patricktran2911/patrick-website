@@ -3,8 +3,7 @@ import Contact from "./render";
 
 export const metadata: Metadata = {
   title: "Contact | Patrick Tran",
-  description:
-    "Contact page for Patrick Tran, Software Engineer specializing in iOS, full-stack development, and AI-driven systems.",
+  description: "Get in touch with Patrick Tran for collaboration or questions.",
 };
 
 export default function Page() {

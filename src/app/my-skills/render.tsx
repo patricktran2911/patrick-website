@@ -1,4 +1,5 @@
 "use client";
+
 import { motion } from "framer-motion";
 import { IconType } from "react-icons";
 import {
@@ -20,23 +21,14 @@ import {
   SiJira,
   SiAmazon,
 } from "react-icons/si";
+import PageWrapper from "@/reusable-components/PageWrapper";
 
-interface Section {
+interface SkillSection {
   title: string;
-  icons: [Icon: IconType, name: string][];
+  icons: [IconType, string][];
 }
 
-const containerVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { staggerChildren: 0.1 } },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: { opacity: 1, y: 0 },
-};
-
-const sections: Section[] = [
+const sections: SkillSection[] = [
   {
     title: "Languages & Frameworks",
     icons: [
@@ -47,7 +39,6 @@ const sections: Section[] = [
       [SiSwift, "Swift (SwiftUI/UIKit)"],
       [SiPython, "Python"],
       [SiCplusplus, "C++"],
-      [SiJavascript, "Java"],
       [SiNodedotjs, "Node.js"],
       [SiFastapi, "FastAPI"],
     ],
@@ -67,7 +58,6 @@ const sections: Section[] = [
       [SiGithub, "Git / GitHub"],
       [SiFigma, "Figma"],
       [SiXcode, "Xcode"],
-      [SiJavascript, "VSCode"],
       [SiJira, "Jira"],
     ],
   },
@@ -75,57 +65,63 @@ const sections: Section[] = [
 
 export default function Skills() {
   return (
-    <div className="flex flex-col space-y-8 w-full h-full text-gray-900 font-sans">
-      <header className="flex flex-col space-y-8 bg-transparent text-white text-center overflow-hidden py-8">
+    <PageWrapper className="min-h-full">
+      {/* Header */}
+      <header className="text-center px-6 pt-12 pb-8">
         <motion.h1
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8 }}
-          className="text-5xl font-extrabold mb-4"
+          transition={{ duration: 0.7 }}
+          className="text-4xl sm:text-5xl font-extrabold text-white mb-4"
         >
           My Skills
         </motion.h1>
         <motion.p
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="text:lg lg:text-xl max-w-3xl mx-auto font-light"
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="text-lg text-white/70 max-w-2xl mx-auto font-light"
         >
-          A collection of tools, languages, and technologies I’ve mastered to
-          build responsive web apps, intelligent systems, and seamless mobile
-          experiences.
+          Tools, languages, and technologies I use to build responsive web apps,
+          intelligent systems, and seamless mobile experiences.
         </motion.p>
       </header>
 
-      <main className="bg-gray-300 hover:opacity-100 opacity-90 px-8 py-4 w-full md:w-3/4 lg:w-1/2 min-w-64 mx-auto space-y-8 transition-opacity duration-300">
-        {sections.map(({ title, icons }) => (
+      {/* Skill sections */}
+      <div className="max-w-4xl mx-auto px-6 pb-20 space-y-8">
+        {sections.map((section, sIdx) => (
           <motion.section
-            key={title}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, amount: 0.3 }}
-            variants={containerVariants}
+            key={section.title}
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.5, delay: sIdx * 0.1 }}
+            className="glass rounded-2xl p-8"
           >
-            <h2 className="text-lg md:text-xl lg:text-2xl font-bold py-6">
-              {title}
+            <h2 className="text-xl font-bold text-white mb-6">
+              {section.title}
             </h2>
-            <motion.div
-              variants={containerVariants}
-              className="grid grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-2 text-sm md:text-base lg:text-lg"
-            >
-              {icons.map(([Icon, name]) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {section.icons.map(([Icon, label], iIdx) => (
                 <motion.div
-                  key={name}
-                  variants={itemVariants}
-                  className="flex items-center gap-2"
+                  key={label}
+                  initial={{ opacity: 0, y: 15 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.3, delay: iIdx * 0.05 }}
+                  whileHover={{ y: -4, scale: 1.05 }}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-white/5 transition-colors"
                 >
-                  <Icon /> {name}
+                  <Icon className="w-8 h-8 text-indigo-400" />
+                  <span className="text-xs text-white/70 text-center font-medium">
+                    {label}
+                  </span>
                 </motion.div>
               ))}
-            </motion.div>
+            </div>
           </motion.section>
         ))}
-      </main>
-    </div>
+      </div>
+    </PageWrapper>
   );
 }

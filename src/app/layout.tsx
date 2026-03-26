@@ -15,12 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Patrick Tran - Software Engineer",
+  title: "Patrick Tran — Software Engineer",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
   },
-  description: "Portfolio and blog of Patrick Tran, Software Engineer.",
+  description:
+    "Portfolio of Patrick Tran — Full-Stack, Mobile, and AI Engineer.",
 };
 
 export default function RootLayout({
@@ -35,7 +36,7 @@ export default function RootLayout({
       >
         {/* Background video */}
         <video
-          className="absolute -z-10 w-full h-full object-cover bg-amber-50"
+          className="fixed inset-0 -z-10 w-full h-full object-cover"
           autoPlay
           loop
           muted
@@ -43,25 +44,18 @@ export default function RootLayout({
           preload="none"
           poster={bg_thumbnail.src}
         >
-          <source src={"/assets/videos/bg-video1.webm"} type="video/webm" />
-          <source src={"/assets/videos/bg-video1.mp4"} type="video/mp4" />
+          <source src="/Assets/videos/bg-video1.webm" type="video/webm" />
+          <source src="/Assets/videos/bg-video1.mp4" type="video/mp4" />
         </video>
 
-        <div className="absolute inset-0 -z-1 bg-black/70" />
+        {/* Dark overlay */}
+        <div className="fixed inset-0 -z-1 bg-black/70" />
 
         {/* Main layout */}
-        <div className="flex flex-col h-screen w-full z-20 ">
+        <div className="flex flex-col h-screen w-full z-20">
           <Navbar />
-
-          {/* Main content */}
           <main className="flex-1 overflow-auto">{children}</main>
-
-          {/* Sticky footer */}
         </div>
-        <footer className="absolute bottom-0 w-full text-center text-white bg-gradient-to-l from-black to-transparent text-sm md:text-lg lg:text-xl p-4">
-          © {new Date().getFullYear()} Patrick Tran. Built with NextJS,
-          TypeScript, TailwindCSS.
-        </footer>
       </body>
     </html>
   );

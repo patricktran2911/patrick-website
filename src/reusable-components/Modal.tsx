@@ -1,36 +1,24 @@
 "use client";
-import { motion, AnimatePresence } from "framer-motion";
 
-type ModalProps = {
-  children?: React.ReactNode;
-};
+import { motion } from "framer-motion";
 
-export default function Modal({ children }: ModalProps) {
+export default function Modal() {
   return (
-    <AnimatePresence>
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+        className="glass-light rounded-2xl p-8 flex flex-col items-center gap-4 shadow-2xl"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
       >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="bg-white p-6 rounded-xl shadow-xl text-center max-w-xs w-full"
-        >
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-lg font-medium text-gray-700">Sending...</p>
-            <p className="text-sm text-gray-500">
-              Please wait while we process your message.
-            </p>
-          </div>
-          {children}
-        </motion.div>
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-700 font-medium">Sending your message…</p>
       </motion.div>
-    </AnimatePresence>
+    </motion.div>
   );
 }

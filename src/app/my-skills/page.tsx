@@ -1,10 +1,10 @@
 import { Metadata } from "next";
-import Skills from "../my-skills/render";
+import Skills from "./render";
 
 export const metadata: Metadata = {
   title: "Skills | Patrick Tran",
   description:
-    "Explore Patrick Tran's technical skills across full-stack development, mobile engineering, and AI-powered systems.",
+    "Technologies and tools Patrick Tran uses to build web, mobile, and AI applications.",
 };
 
 export default function Page() {

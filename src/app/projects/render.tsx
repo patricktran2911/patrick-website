@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import PageWrapper from "@/reusable-components/PageWrapper";
 
 const projects = [
   {
@@ -10,7 +11,7 @@ const projects = [
     tech: ["React", "TypeScript", "Python", "WebRTC", "MediaPipe"],
     link: "https://neurospring.org/current-projects",
     icon: "/Assets/images/neurospring_logo.png",
-    logoBackground: "bg-white",
+    logoBg: "bg-white",
   },
   {
     title: "iOS FanFly App",
@@ -19,7 +20,7 @@ const projects = [
     tech: ["SwiftUI", "UIKit", "Figma", "Alamofire"],
     link: "https://fanfly.live",
     icon: "/Assets/images/fanfly-icon.png",
-    logoBackground: "bg-black",
+    logoBg: "bg-black",
   },
   {
     title: "Scoop iOS",
@@ -28,7 +29,7 @@ const projects = [
     tech: ["SwiftUI", "UIKit", "PromiseKit", "Alamofire"],
     link: "#",
     icon: "/Assets/images/scoop-icon.png",
-    logoBackground: "bg-[#00b372]",
+    logoBg: "bg-[#00b372]",
   },
   {
     title: "iUSC Citizenship Prep",
@@ -37,130 +38,92 @@ const projects = [
     tech: ["SwiftUI", "Combine", "CoreData", "UIKit", "In-App Purchase"],
     link: "https://apps.apple.com/us/app/iusc/id6745776441",
     icon: "/Assets/images/iUSC-icon.png",
-    logoBackground: "bg-[#969798]",
+    logoBg: "bg-[#969798]",
   },
 ];
 
 export default function Projects() {
   return (
-    <div className="h-full py-16 px-4 sm:px-6 md:px-12 bg-transparent overflow-y-auto">
-      {/* Page Heading */}
-      <motion.h1
-        initial={{ opacity: 0, y: -30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="text-3xl sm:text-4xl font-extrabold text-center mb-6 text-white"
-      >
-        Projects
-      </motion.h1>
+    <PageWrapper className="min-h-full px-4 sm:px-6 md:px-12 py-12">
+      {/* Header */}
+      <header className="text-center mb-12">
+        <motion.h1
+          initial={{ opacity: 0, y: -30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7 }}
+          className="text-4xl sm:text-5xl font-extrabold text-white mb-4"
+        >
+          Projects
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="text-lg text-white/70 max-w-2xl mx-auto font-light"
+        >
+          A collection of real-world projects across web, mobile, and AI
+          domains — blending creativity, engineering, and problem-solving.
+        </motion.p>
+      </header>
 
-      {/* Short Intro */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-        className="max-w-2xl mx-auto text-center mb-10 text-white text-md sm:text-lg"
-      >
-        Here’s a collection of real-world projects I’ve built across web,
-        mobile, and AI domains — blending creativity, engineering, and
-        user-centric problem solving.
-      </motion.div>
-
-      {/* Category Tags */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.3 }}
-        className="flex flex-wrap justify-center gap-3 mb-12 text-sm sm:text-base"
-      >
-        {["Full-Stack", "iOS", "AI", "Streaming", "UI/UX"].map((tag, i) => (
-          <span
-            key={i}
-            className="px-3 py-1 bg-white text-gray-800 border border-gray-300 rounded-full shadow-sm"
-          >
-            {tag}
-          </span>
-        ))}
-      </motion.div>
-
-      {/* Project Grid */}
-      <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-7 md:gap-10">
+      {/* Project grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
         {projects.map((project, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0.5, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.48 }}
-            className="
-        group relative flex flex-col p-7 pb-5 bg-white/80
-        backdrop-blur-md border border-gray-100 rounded-2xl
-        shadow-lg hover:shadow-2xl transition-all duration-300
-        overflow-hidden
-      "
-            style={{
-              border: "1.5px solid rgba(30,144,255,0.08)",
-            }}
+          <motion.article
+            key={project.title}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 + i * 0.1 }}
+            whileHover={{ y: -6 }}
+            className="glass rounded-2xl p-6 flex flex-col gap-4 hover:border-indigo-500/30 transition-all duration-300 group"
           >
-            {/* Accent Gradient Border Ring */}
-            <div
-              className="absolute -inset-px z-0 rounded-2xl pointer-events-none"
-              style={{
-                background:
-                  "linear-gradient(120deg, #3b82f6 60%, #818cf8 100%)",
-                opacity: 0.09,
-              }}
-            />
-
-            <div className="z-10 flex flex-col items-center mb-4">
-              {project.icon && (
-                <div
-                  className={`w-16 h-16 mb-3 rounded-full shadow-lg flex items-center justify-center ${project.logoBackground} border border-gray-200 group-hover:scale-105 transition`}
-                >
-                  <img
-                    src={project.icon}
-                    alt={`${project.title} icon`}
-                    className="w-10 h-10 object-contain rounded-full"
-                    draggable={false}
-                  />
-                </div>
-              )}
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center mb-1">
+            {/* Icon + Title */}
+            <div className="flex items-center gap-4">
+              <div
+                className={`w-12 h-12 rounded-xl ${project.logoBg} flex items-center justify-center overflow-hidden shadow-lg`}
+              >
+                <img
+                  src={project.icon}
+                  alt={project.title}
+                  className="w-8 h-8 object-contain"
+                />
+              </div>
+              <h2 className="text-xl font-bold text-white group-hover:text-indigo-300 transition-colors">
                 {project.title}
               </h2>
             </div>
-            <p className="text-[15px] text-gray-700 mb-4 text-center">
+
+            {/* Description */}
+            <p className="text-sm text-white/60 leading-relaxed flex-1">
               {project.description}
             </p>
-            <div className="flex flex-wrap justify-center gap-2 mb-5">
-              {project.tech.map((tech, idx) => (
+
+            {/* Tech chips */}
+            <div className="flex flex-wrap gap-2">
+              {project.tech.map((t) => (
                 <span
-                  key={idx}
-                  className="px-2.5 py-1 text-xs bg-gray-100 border border-gray-200 rounded-full font-medium text-gray-600"
+                  key={t}
+                  className="px-2.5 py-1 text-xs rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
                 >
-                  {tech}
+                  {t}
                 </span>
               ))}
             </div>
-            {project.link && project.link !== "#" && (
+
+            {/* Link */}
+            {project.link !== "#" && (
               <a
                 href={project.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="
-            inline-flex items-center justify-center mt-auto py-2 px-5
-            rounded-full text-white bg-gradient-to-r from-blue-500 to-indigo-500
-            font-medium text-[15px] shadow hover:from-blue-600 hover:to-indigo-600
-            transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400
-          "
-                style={{ letterSpacing: "0.01em" }}
+                className="inline-flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 font-medium mt-auto pt-2"
               >
                 View Project
                 <svg
-                  className="ml-2 w-4 h-4"
+                  className="w-4 h-4 transition-transform group-hover:translate-x-1"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth={2}
                   viewBox="0 0 24 24"
                 >
                   <path
@@ -171,27 +134,27 @@ export default function Projects() {
                 </svg>
               </a>
             )}
-          </motion.div>
+          </motion.article>
         ))}
       </div>
 
-      {/* Reflection Section */}
+      {/* Reflection */}
       <motion.div
-        initial={{ opacity: 0.5, y: 30 }}
+        initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.5 }}
-        className="mt-20 bg-white border-l-4 border-blue-500 p-6 max-w-4xl mx-auto rounded shadow"
+        className="mt-16 glass rounded-2xl p-6 max-w-4xl mx-auto border-l-4 border-indigo-500"
       >
-        <h3 className="text-lg font-semibold mb-2 text-blue-600">Reflection</h3>
-        <p className="text-gray-700 text-sm sm:text-base leading-relaxed">
+        <h3 className="text-lg font-semibold text-indigo-300 mb-2">
+          Reflection
+        </h3>
+        <p className="text-white/60 text-sm leading-relaxed">
           Working across diverse domains from ambulance-based real-time systems
-          to modular SwiftUI apps has strengthened my ability to design
-          scalable, performant solutions with clear UX in mind. I enjoy learning
-          from real-world constraints and turning technical challenges into
-          elegant code.
+          to consumer iOS apps has taught me that great software comes from deeply
+          understanding the user's context and constraints.
         </p>
       </motion.div>
-    </div>
+    </PageWrapper>
   );
 }

@@ -1,8 +1,20 @@
 "use client";
+
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { sendForm } from "emailjs-com";
+import { Mail, MapPin, Linkedin } from "lucide-react";
 import Modal from "@/reusable-components/Modal";
+import PageWrapper from "@/reusable-components/PageWrapper";
+
+const EMAILJS_SERVICE = "service_nt4r3gp";
+const EMAILJS_TEMPLATE = "template_2fa157s";
+const EMAILJS_PUBLIC_KEY = "61MNx-0wj6lZewpbw";
+
+const fade = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0 },
+};
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
@@ -13,17 +25,17 @@ export default function Contact() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSending(true);
     sendForm(
-      "service_nt4r3gp",
-      "template_2fa157s",
+      EMAILJS_SERVICE,
+      EMAILJS_TEMPLATE,
       e.target as HTMLFormElement,
-      "61MNx-0wj6lZewpbw"
+      EMAILJS_PUBLIC_KEY
     ).finally(() => {
       setIsSending(false);
       setSubmitted(true);
@@ -31,64 +43,66 @@ export default function Contact() {
     });
   };
 
-  const variants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
-  };
-
   return (
-    <div className="bg-none text-gray-900 font-sans">
+    <PageWrapper className="min-h-full">
       {isSending && <Modal />}
-      <header className="bg-transparent text-white pt-2 pb-10 px-8 text-center overflow-hidden">
+
+      {/* Header */}
+      <header className="text-center px-6 pt-12 pb-8">
         <motion.h1
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-5xl font-extrabold mb-4"
+          transition={{ duration: 0.7 }}
+          className="text-4xl sm:text-5xl font-extrabold text-white mb-4"
         >
           Get in Touch
         </motion.h1>
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-xl max-w-3xl mx-auto font-light"
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="text-lg text-white/70 max-w-2xl mx-auto font-light"
         >
-          Whether you're looking to collaborate, ask questions, or just say hi —
-          I'm always open to meaningful connections.
+          Whether you&apos;re looking to collaborate, ask questions, or just say
+          hi — I&apos;m always open to meaningful connections.
         </motion.p>
       </header>
 
-      <main className="bg-gray-300 hover:opacity-100 lg:opacity-90 px-8 py-8 max-w-5xl mx-auto space-y-8 transition-opacity duration-300">
+      {/* Content */}
+      <div className="max-w-4xl mx-auto px-6 pb-20 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Contact Info */}
         <motion.section
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.3 }}
-          variants={variants}
+          variants={fade}
           transition={{ duration: 0.6 }}
+          className="glass rounded-2xl p-8"
         >
-          <h2 className="text-3xl font-bold mb-4">Contact Info</h2>
-          <ul className="space-y-4">
-            <li>
-              <strong>Email:</strong>{" "}
+          <h2 className="text-2xl font-bold text-white mb-6">Contact Info</h2>
+          <ul className="space-y-5">
+            <li className="flex items-center gap-3">
+              <Mail className="w-5 h-5 text-indigo-400 flex-shrink-0" />
               <a
                 href="mailto:patricktran291197@gmail.com"
-                className="text-blue-600 hover:underline"
+                className="text-white/70 hover:text-indigo-300 transition-colors text-sm"
               >
                 patricktran291197@gmail.com
               </a>
             </li>
-            <p className="text-black">
-              <strong>Location:</strong>
-              {" Sacramento, CA, United States"}
-            </p>
-            <li>
-              <strong>LinkedIn:</strong>{" "}
+            <li className="flex items-center gap-3">
+              <MapPin className="w-5 h-5 text-indigo-400 flex-shrink-0" />
+              <span className="text-white/70 text-sm">
+                Sacramento, CA, United States
+              </span>
+            </li>
+            <li className="flex items-center gap-3">
+              <Linkedin className="w-5 h-5 text-indigo-400 flex-shrink-0" />
               <a
                 href="https://linkedin.com/in/patrick-tran-99768828a"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
+                className="text-white/70 hover:text-indigo-300 transition-colors text-sm"
               >
                 linkedin.com/in/patrick-tran-99768828a
               </a>
@@ -96,69 +110,84 @@ export default function Contact() {
           </ul>
         </motion.section>
 
+        {/* Contact Form */}
         <motion.section
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.3 }}
-          variants={variants}
-          transition={{ duration: 0.6, delay: 0.2 }}
+          variants={fade}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="glass rounded-2xl p-8"
         >
-          <h2 className="text-3xl font-bold mb-4">Send a Message</h2>
+          <h2 className="text-2xl font-bold text-white mb-6">
+            Send a Message
+          </h2>
+
           {submitted ? (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              className="text-green-600 font-semibold"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-8"
             >
-              Thanks for your message and appreciate for your time to look at my
-              website! I will get back to you as soon as possible.
-            </motion.p>
+              <div className="text-4xl mb-3">✉️</div>
+              <p className="text-green-400 font-semibold mb-2">
+                Message sent!
+              </p>
+              <p className="text-white/50 text-sm">
+                Thanks for reaching out. I&apos;ll get back to you soon.
+              </p>
+            </motion.div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {["name", "email", "message"].map((field, idx) => (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {(["name", "email", "message"] as const).map((field, idx) => (
                 <motion.div
                   key={field}
-                  initial={{ opacity: 0, y: 15 }}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: idx * 0.2 }}
+                  transition={{ duration: 0.4, delay: 0.3 + idx * 0.1 }}
                 >
-                  <label className="block mb-2 font-medium capitalize">
+                  <label className="block mb-1.5 text-sm font-medium text-white/80 capitalize">
                     {field}
                   </label>
                   {field !== "message" ? (
                     <input
                       type={field === "email" ? "email" : "text"}
                       name={field}
-                      value={form[field as keyof typeof form]}
+                      value={form[field]}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border rounded-lg"
+                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/30 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition"
+                      placeholder={
+                        field === "email"
+                          ? "your@email.com"
+                          : "Your name"
+                      }
                     />
                   ) : (
                     <textarea
                       name="message"
-                      rows={5}
+                      rows={4}
                       value={form.message}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border rounded-lg"
-                    ></textarea>
+                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/30 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition resize-none"
+                      placeholder="Your message…"
+                    />
                   )}
                 </motion.div>
               ))}
               <motion.button
                 type="submit"
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/30"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
               >
                 Send Message
               </motion.button>
             </form>
           )}
         </motion.section>
-      </main>
-    </div>
+      </div>
+    </PageWrapper>
   );
 }

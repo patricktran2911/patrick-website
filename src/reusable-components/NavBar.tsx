@@ -2,108 +2,114 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 
-const containerVariants = {
-  hidden: {
-    opacity: 0,
-    scale: 0.95,
-    y: -10,
-    transition: {
-      duration: 0.2,
-      ease: "easeOut",
-    },
-  },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    y: 0,
-    transition: {
-      type: "spring",
-      stiffness: 100,
-      damping: 15,
-      staggerChildren: 0.08,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const sectionsVariants = {
-  hidden: {
-    opacity: 0,
-    y: 10,
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: "spring",
-      stiffness: 100,
-      damping: 12,
-    },
-  },
-};
+const routes = [
+  { path: "/about", label: "About" },
+  { path: "/projects", label: "Projects" },
+  { path: "/my-skills", label: "Skills" },
+  { path: "/resume", label: "Resume" },
+  { path: "/contact", label: "Contact" },
+  { path: "/chat", label: "AI Chat" },
+];
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
-    <nav className="flex z-50 px-8 py-6 justify-between items-center border-b text-black border-gray-200 opacity-80 hover:opacity-100 bg-white backdrop-blur-sm transition-all duration-300 relative">
-      <motion.div className="sm:text-lg lg:text-2xl font-bold">
-        <Link href="/">Patrick Tran</Link>
-      </motion.div>
+    <nav className="sticky top-0 z-50 glass-light">
+      <div className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
+        {/* Logo */}
+        <motion.div
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+        >
+          <Link
+            href="/"
+            className="text-xl lg:text-2xl font-bold text-gray-900 tracking-tight"
+          >
+            Patrick Tran
+          </Link>
+        </motion.div>
 
-      <motion.button
-        className="lg:hidden"
-        onClick={() => setMenuOpen(!menuOpen)}
-        aria-label="Toggle menu"
-      >
-        {menuOpen ? <X size={24} /> : <Menu size={24} />}
-      </motion.button>
+        {/* Mobile toggle */}
+        <motion.button
+          className="lg:hidden text-gray-700"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="Toggle menu"
+          whileTap={{ scale: 0.9 }}
+        >
+          {menuOpen ? <X size={24} /> : <Menu size={24} />}
+        </motion.button>
 
-      <ul className="hidden lg:flex space-x-6 sm:text-sm lg:text-lg">
-        {["about", "projects", "my-skills", "resume", "contact"].map(
-          (route) => (
-            <motion.li key={route}>
-              <a
-                href={`/${route}`}
-                className="cursor-pointer hover:text-blue-500 transition-colors"
-              >
-                {route === "my-skills"
-                  ? "Skills"
-                  : route.charAt(0).toUpperCase() + route.slice(1)}
-              </a>
-            </motion.li>
-          )
-        )}
-      </ul>
+        {/* Desktop nav */}
+        <ul className="hidden lg:flex items-center gap-1">
+          {routes.map((route) => {
+            const isActive = pathname === route.path;
+            return (
+              <li key={route.path}>
+                <Link
+                  href={route.path}
+                  className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                    isActive
+                      ? "text-indigo-600"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/60"
+                  }`}
+                >
+                  {route.label}
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-indicator"
+                      className="absolute inset-0 rounded-lg bg-indigo-50 -z-10"
+                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    />
+                  )}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
 
+      {/* Mobile menu */}
       <AnimatePresence>
         {menuOpen && (
-          <motion.ul
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            exit="hidden"
-            className="absolute top-full left-0 w-full bg-white border-t border-gray-200 flex flex-col items-start px-8 py-4 space-y-4 lg:hidden sm:text-base text-sm z-40 shadow-md rounded-b-xl"
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="lg:hidden overflow-hidden border-t border-gray-200/50"
           >
-            {["about", "projects", "my-skills", "resume", "contact"].map(
-              (route) => (
-                <motion.li key={route} variants={sectionsVariants}>
-                  <Link
-                    href={`/${route}`}
-                    className="cursor-pointer hover:text-blue-500 transition-colors block"
-                    onClick={() => setMenuOpen(false)}
+            <ul className="flex flex-col px-6 py-3 gap-1">
+              {routes.map((route, i) => {
+                const isActive = pathname === route.path;
+                return (
+                  <motion.li
+                    key={route.path}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.05 }}
                   >
-                    {route === "my-skills"
-                      ? "Skills"
-                      : route.charAt(0).toUpperCase() + route.slice(1)}
-                  </Link>
-                </motion.li>
-              )
-            )}
-          </motion.ul>
+                    <Link
+                      href={route.path}
+                      onClick={() => setMenuOpen(false)}
+                      className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        isActive
+                          ? "bg-indigo-50 text-indigo-600"
+                          : "text-gray-600 hover:bg-gray-100/60 hover:text-gray-900"
+                      }`}
+                    >
+                      {route.label}
+                    </Link>
+                  </motion.li>
+                );
+              })}
+            </ul>
+          </motion.div>
         )}
       </AnimatePresence>
     </nav>

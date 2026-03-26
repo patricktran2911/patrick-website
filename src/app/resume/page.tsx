@@ -7,8 +7,6 @@ export const metadata: Metadata = {
     "Interactive resume of Patrick Tran, Software Engineer experienced in iOS, full-stack development, and AI systems.",
 };
 
-const Page = () => {
+export default function Page() {
   return <Resume />;
-};
-
-export default Page;
+}

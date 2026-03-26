@@ -2,127 +2,150 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, Download, Maximize2 } from "lucide-react";
+import PageWrapper from "@/reusable-components/PageWrapper";
 
-const sectionVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 },
-};
+const RESUME_DOWNLOAD =
+  "https://drive.google.com/uc?export=download&id=1wgqk3KyJd1mj3O02Swn9Hyf1jG6_iUYm";
+const RESUME_VIEW =
+  "https://drive.google.com/file/d/1wgqk3KyJd1mj3O02Swn9Hyf1jG6_iUYm/view";
+
+const highlights = [
+  "Full-stack development with React, Next.js, FastAPI",
+  "Mobile experience with SwiftUI & UIKit",
+  "AI/ML applications using MediaPipe, OpenCV, UNIK",
+  "Strong communicator and agile collaborator",
+  "Tools: Git, Supabase, AWS, Jira, Figma",
+];
 
 export default function Resume() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="flex flex-col items-center text-gray-900 font-sans">
+    <PageWrapper className="min-h-full">
       {/* Header */}
-      <header className="bg-transparent text-white pt-12 pb-10 px-6 sm:px-8 text-center">
+      <header className="text-center px-6 pt-12 pb-8">
         <motion.h1
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-3xl sm:text-5xl font-extrabold mb-4"
+          transition={{ duration: 0.7 }}
+          className="text-4xl sm:text-5xl font-extrabold text-white mb-4"
         >
           My Resume
         </motion.h1>
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-lg sm:text-xl max-w-3xl mx-auto font-light"
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="text-lg text-white/70 max-w-2xl mx-auto font-light"
         >
-          Tap the preview to view in full screen or download below.
+          Tap the preview to view in full screen, or download below.
         </motion.p>
       </header>
 
-      {/* Main content */}
-      <main className="flex flex-col-reverse lg:flex-row justify-center items-center gap-8 px-6 sm:px-12 py-12 bg-gray-100 w-full max-w-5xl transition-all duration-300">
-        {/* Thumbnail Preview */}
-        <motion.section
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-          variants={sectionVariants}
-          transition={{ duration: 0.6 }}
+      {/* Content */}
+      <div className="max-w-5xl mx-auto px-6 pb-20 flex flex-col-reverse lg:flex-row items-center gap-8">
+        {/* Thumbnail */}
+        <motion.div
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
           onClick={() => setIsOpen(true)}
-          className="cursor-pointer w-full max-w-md rounded-lg border shadow hover:shadow-xl transition"
+          className="glass rounded-2xl p-2 cursor-pointer group hover:border-indigo-500/30 transition-all duration-300 relative"
         >
           <img
             src="/Assets/images/resume-thumbnail.png"
             alt="Resume thumbnail"
-            className="rounded w-full"
+            className="rounded-xl w-full max-w-md"
           />
-        </motion.section>
+          <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 group-hover:bg-black/30 transition-colors">
+            <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </motion.div>
 
-        {/* Download & Highlights */}
-        <motion.section
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-          variants={sectionVariants}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-md text-center lg:text-right"
+        {/* Highlights & Download */}
+        <motion.div
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="glass rounded-2xl p-8 w-full max-w-md"
         >
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Highlights
-          </h2>
-          <ul className="text-sm sm:text-base text-gray-700 space-y-2 mb-6">
-            <li>• Full-stack development with React, Next.js, FastAPI</li>
-            <li>• Mobile experience with SwiftUI & UIKit</li>
-            <li>• AI/ML applications using MediaPipe, OpenCV, UNIK</li>
-            <li>• Strong communicator and agile collaborator</li>
-            <li>• Tools: Git, Supabase, AWS, Jira, Figma</li>
+          <h2 className="text-xl font-bold text-white mb-4">Highlights</h2>
+          <ul className="space-y-2.5 mb-8">
+            {highlights.map((h, i) => (
+              <motion.li
+                key={i}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.5 + i * 0.08 }}
+                className="flex items-start gap-2 text-sm text-white/70"
+              >
+                <span className="text-indigo-400 mt-0.5">•</span>
+                {h}
+              </motion.li>
+            ))}
           </ul>
+
           <motion.a
-            href="https://drive.google.com/uc?export=download&id=1i_hw3HGp1htJ259xTeN7e6mxywjAXfAw"
+            href={RESUME_DOWNLOAD}
             download
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block px-6 py-3 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition duration-200"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/30"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
+            <Download className="w-4 h-4" />
             Download PDF Resume
           </motion.a>
-        </motion.section>
-      </main>
+        </motion.div>
+      </div>
 
       {/* Fullscreen Modal */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsOpen(false)}
           >
+            <motion.button
+              className="absolute top-4 right-4 text-white/70 hover:text-white p-2"
+              onClick={() => setIsOpen(false)}
+              whileHover={{ scale: 1.1 }}
+            >
+              <X size={28} />
+            </motion.button>
+
             <motion.div
               onClick={(e) => e.stopPropagation()}
-              initial={{ scale: 0.95, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              exit={{ scale: 0.9, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="relative w-full max-w-lg md:max-w-2xl lg:max-w-5xl h-[100vh] md:h-[70vh] lg:h-[90vh] bg-white  rounded-lg shadow-lg overflow-hidden"
+              className="max-w-3xl w-full max-h-[90vh] overflow-auto"
             >
-              {/* Close Button */}
-              <button
-                onClick={() => setIsOpen(false)}
-                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              >
-                <X size={28} />
-              </button>
-
-              {/* PDF in iframe */}
-              <iframe
-                src="/Assets/pdf/Patrick's-Resume-v2.pdf#view=FitH"
-                className="w-full h-full border-none"
-                title="Resume Fullscreen"
-                content="application/pdf"
-              ></iframe>
+              <img
+                src="/Assets/images/resume-thumbnail.png"
+                alt="Resume full view"
+                className="w-full rounded-xl"
+              />
+              <div className="flex justify-center mt-4">
+                <a
+                  href={RESUME_VIEW}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
+                >
+                  Open in Google Drive →
+                </a>
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </PageWrapper>
   );
 }
