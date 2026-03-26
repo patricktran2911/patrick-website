@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
       "media-src 'self'",
       "font-src 'self'",
       "frame-src https://challenges.cloudflare.com",
-      "connect-src 'self' https://api.emailjs.com https://challenges.cloudflare.com",
+      "connect-src 'self' https://api.emailjs.com https://challenges.cloudflare.com https://ai-dev.patrickcs-web.com",
       "object-src 'none'",
       "base-uri 'self'",
     ].join("; ");

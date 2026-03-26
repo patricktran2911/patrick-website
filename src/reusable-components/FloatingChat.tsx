@@ -253,11 +253,11 @@ export default function FloatingChat() {
             style={{ transformOrigin: "bottom right" }}
             className={[
               "fixed z-50 flex flex-col overflow-hidden",
-              "bottom-24 right-4 sm:right-6",
-              "w-[calc(100vw-2rem)] sm:w-[400px]",
-              "h-[75vh] sm:h-[560px]",
-              "rounded-2xl shadow-2xl shadow-black/50",
-              "bg-[#13151f] border border-white/10",
+              "bottom-0 right-0 sm:bottom-24 sm:right-6",
+              "w-full sm:w-[400px]",
+              "h-[100dvh] sm:h-[560px]",
+              "sm:rounded-2xl shadow-2xl shadow-black/50",
+              "bg-[#13151f] border-0 sm:border border-white/10",
             ].join(" ")}
           >
             {/* Header */}
@@ -429,7 +429,7 @@ export default function FloatingChat() {
             </div>
 
             {/* Input */}
-            <div className="flex-shrink-0 border-t border-white/5 bg-[#1a1d27] px-3 py-3">
+            <div className="flex-shrink-0 border-t border-white/5 bg-[#1a1d27] px-3 py-3 pb-[env(safe-area-inset-bottom,12px)]">
               <div className="flex items-end gap-2">
                 <textarea
                   ref={inputRef}
@@ -439,7 +439,7 @@ export default function FloatingChat() {
                   disabled={sending}
                   placeholder="Ask about Patrick…"
                   rows={1}
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-indigo-500 transition resize-none min-h-[38px] max-h-[100px]"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-base sm:text-[13px] text-white placeholder:text-white/30 outline-none focus:border-indigo-500 transition resize-none min-h-[38px] max-h-[100px]"
                   onInput={(e) => {
                     const el = e.currentTarget;
                     el.style.height = "auto";
