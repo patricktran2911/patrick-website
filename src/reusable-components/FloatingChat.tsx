@@ -246,10 +246,10 @@ export default function FloatingChat() {
         {open && (
           <motion.div
             key="chat-panel"
-            initial={{ opacity: 0, scale: 0.85, y: 24 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.85, y: 24 }}
-            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            initial={{ opacity: 0, y: "100%" }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: "100%" }}
+            transition={{ type: "spring", stiffness: 320, damping: 32 }}
             style={{ transformOrigin: "bottom right" }}
             className={[
               "fixed z-50 flex flex-col overflow-hidden",
@@ -260,8 +260,42 @@ export default function FloatingChat() {
               "bg-[#13151f] border-0 sm:border border-white/10",
             ].join(" ")}
           >
-            {/* Header */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-[#1a1d27] flex-shrink-0">
+            {/* ── Mobile header (full-screen) ── */}
+            <div className="flex sm:hidden items-center px-3 py-3 border-b border-white/5 bg-[#1a1d27] flex-shrink-0 pt-[env(safe-area-inset-top,12px)]">
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setOpen(false)}
+                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/10 text-white mr-3"
+                aria-label="Close chat"
+              >
+                <X className="w-5 h-5" />
+              </motion.button>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate leading-tight">Patrick AI</p>
+                <p className="text-[11px] text-white/40 truncate">RAG + LLM · Hỗ trợ tiếng Việt</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setShowSettings(!showSettings)}
+                  className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+                  aria-label="Settings"
+                >
+                  <Settings2 className="w-4 h-4" />
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={clearChat}
+                  className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+                  aria-label="Clear chat"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </motion.button>
+              </div>
+            </div>
+
+            {/* ── Desktop header ── */}
+            <div className="hidden sm:flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-[#1a1d27] flex-shrink-0">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-indigo-500/30">
                 P
               </div>
@@ -300,8 +334,6 @@ export default function FloatingChat() {
                 </motion.button>
               </div>
             </div>
-
-            {/* Settings drawer */}
             <AnimatePresence>
               {showSettings && (
                 <motion.div
