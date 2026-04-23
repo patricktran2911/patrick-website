@@ -397,14 +397,22 @@ export default function FloatingMusicPlayer() {
         expandedWidth="min(22rem, calc(100vw - 1.5rem))"
         expandedHeight="min(32rem, calc(100vh - 7rem))"
         collapsedRadius={999}
-        expandedRadius={26}
-        collapsedSurfaceClassName="music-shell"
+        expandedRadius={28}
+        collapsedSurfaceClassName="chat-fab"
         expandedSurfaceClassName="music-shell"
         transformOrigin="bottom left"
         collapsedContent={
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-white shadow-lg shadow-sky-500/20">
-            <Music4 className="h-4 w-4" />
-          </span>
+          <>
+            <motion.span
+              className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(44,195,255,0.18),transparent_70%)]"
+              animate={{ scale: [1, 1.08, 1], opacity: [0.75, 1, 0.75] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            <span className="relative flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] shadow-lg shadow-sky-500/20">
+              <Music4 className="h-4 w-4 text-white" />
+            </span>
+          </>
         }
         expandedContent={
           <>
