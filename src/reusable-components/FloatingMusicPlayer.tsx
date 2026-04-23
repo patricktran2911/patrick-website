@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  ListMusic,
   Minimize2,
   Music4,
   Pause,
@@ -26,12 +28,15 @@ type YTPlayerPlaylistConfig = {
 type YTPlayerInstance = {
   cuePlaylist: (playlist: YTPlayerPlaylistConfig) => void;
   loadPlaylist: (playlist: YTPlayerPlaylistConfig) => void;
+  playVideoAt: (index: number) => void;
   playVideo: () => void;
   pauseVideo: () => void;
   nextVideo: () => void;
   previousVideo: () => void;
   setVolume: (volume: number) => void;
   getVolume: () => number;
+  getPlaylist: () => string[];
+  getPlaylistIndex: () => number;
   getVideoData: () => { title?: string };
   getCurrentTime: () => number;
   getDuration: () => number;
@@ -133,6 +138,7 @@ function loadYouTubeIframeApi() {
 
 export default function FloatingMusicPlayer() {
   const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<"player" | "playlist">("player");
   const [playerReady, setPlayerReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -142,6 +148,9 @@ export default function FloatingMusicPlayer() {
   const [duration, setDuration] = useState("0:00");
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(DEFAULT_VOLUME);
+  const [playlistIds, setPlaylistIds] = useState<string[]>([]);
+  const [playlistIndex, setPlaylistIndex] = useState(0);
+  const [playlistTitles, setPlaylistTitles] = useState<Record<string, string>>({});
 
   const playerRef = useRef<YTPlayerInstance | null>(null);
   const shouldAutoplayRef = useRef(false);
@@ -153,8 +162,27 @@ export default function FloatingMusicPlayer() {
     const title = player.getVideoData().title?.trim();
     const currentTime = player.getCurrentTime();
     const totalTime = player.getDuration();
+    const playlist = player.getPlaylist();
+    const nextIndex = player.getPlaylistIndex();
 
     if (title) setCurrentTitle(title);
+    if (playlist.length > 0) {
+      setPlaylistIds((prev) =>
+        prev.length === playlist.length && prev.every((item, index) => item === playlist[index])
+          ? prev
+          : playlist
+      );
+    }
+    if (Number.isFinite(nextIndex) && nextIndex >= 0) {
+      setPlaylistIndex(nextIndex);
+    }
+    if (title && playlist[nextIndex]) {
+      setPlaylistTitles((prev) =>
+        prev[playlist[nextIndex]] === title
+          ? prev
+          : { ...prev, [playlist[nextIndex]]: title }
+      );
+    }
     setElapsed(formatTime(currentTime));
     setDuration(formatTime(totalTime));
     setProgress(totalTime > 0 ? Math.min((currentTime / totalTime) * 100, 100) : 0);
@@ -302,6 +330,7 @@ export default function FloatingMusicPlayer() {
       const player = await ensurePlayer(false);
       player.nextVideo();
       player.playVideo();
+      setView("player");
       setStatusText("Skipping to the next track...");
     } catch (error) {
       setStatusText((error as Error).message);
@@ -313,6 +342,7 @@ export default function FloatingMusicPlayer() {
       const player = await ensurePlayer(false);
       player.previousVideo();
       player.playVideo();
+      setView("player");
       setStatusText("Going back...");
     } catch (error) {
       setStatusText((error as Error).message);
@@ -321,9 +351,28 @@ export default function FloatingMusicPlayer() {
 
   function handleExpand() {
     setExpanded(true);
+    setView("player");
     if (!playerRef.current && !loading) {
       void ensurePlayer(false);
     }
+  }
+
+  async function handleSelectTrack(index: number) {
+    try {
+      const player = await ensurePlayer(false);
+      player.playVideoAt(index);
+      setPlaylistIndex(index);
+      setView("player");
+      setStatusText(`Starting track ${String(index + 1).padStart(2, "0")}...`);
+    } catch (error) {
+      setStatusText((error as Error).message);
+    }
+  }
+
+  function getTrackLabel(videoId: string, index: number) {
+    if (playlistTitles[videoId]) return playlistTitles[videoId];
+    if (index === playlistIndex && currentTitle) return currentTitle;
+    return `Track ${String(index + 1).padStart(2, "0")}`;
   }
 
   return (
@@ -360,88 +409,170 @@ export default function FloatingMusicPlayer() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setExpanded(false)}
-                  className="music-control h-9 w-9"
-                  aria-label="Minimize music player"
-                >
-                  <Minimize2 className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="mb-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="truncate text-sm text-white/70">Patrick's YouTube playlist</p>
-                  <span className="text-[11px] text-white/42">
-                    {loading ? "Loading" : statusText}
-                  </span>
-                </div>
-
-                <div className="music-progress-track h-1.5">
-                  <div
-                    className="music-progress-bar h-full"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-
-                <div className="mt-2 flex items-center justify-between text-[11px] text-white/42">
-                  <span>{elapsed}</span>
-                  <span>{duration}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setView((prev) => (prev === "player" ? "playlist" : "player"))}
+                    className="music-control h-9 w-9"
+                    aria-label={view === "player" ? "Show playlist" : "Show player"}
+                  >
+                    {view === "player" ? (
+                      <ListMusic className="h-4 w-4" />
+                    ) : (
+                      <ArrowLeft className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setExpanded(false);
+                      setView("player");
+                    }}
+                    className="music-control h-9 w-9"
+                    aria-label="Minimize music player"
+                  >
+                    <Minimize2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
-              <div className="mb-3 flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    void handlePrevious();
-                  }}
-                  className="music-control h-11 w-11"
-                  aria-label="Previous track"
+              <div className="overflow-hidden">
+                <motion.div
+                  className="flex w-[200%]"
+                  animate={{ x: view === "player" ? "0%" : "-50%" }}
+                  transition={{ type: "spring", stiffness: 260, damping: 28 }}
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    void handleTogglePlay();
-                  }}
-                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 disabled:cursor-not-allowed"
-                  aria-label={isPlaying ? "Pause music" : "Play music"}
-                >
-                  {isPlaying ? (
-                    <Pause className="h-4 w-4" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                  {isPlaying ? "Pause" : "Play"}
-                </button>
-                <button
-                  onClick={() => {
-                    void handleNext();
-                  }}
-                  className="music-control h-11 w-11"
-                  aria-label="Next track"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
+                  <div className="w-1/2 pr-2">
+                    <div className="mb-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-3">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="truncate text-sm text-white/70">Patrick's YouTube playlist</p>
+                        <span className="text-[11px] text-white/42">
+                          {loading ? "Loading" : statusText}
+                        </span>
+                      </div>
 
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-white/60">
-                    <Volume2 className="h-4 w-4" />
-                    <span className="text-xs">Volume</span>
+                      <div className="music-progress-track h-1.5">
+                        <div
+                          className="music-progress-bar h-full"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-white/42">
+                        <span>{elapsed}</span>
+                        <span>{duration}</span>
+                      </div>
+                    </div>
+
+                    <div className="mb-3 flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          void handlePrevious();
+                        }}
+                        className="music-control h-11 w-11"
+                        aria-label="Previous track"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          void handleTogglePlay();
+                        }}
+                        className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 disabled:cursor-not-allowed"
+                        aria-label={isPlaying ? "Pause music" : "Play music"}
+                      >
+                        {isPlaying ? (
+                          <Pause className="h-4 w-4" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                        {isPlaying ? "Pause" : "Play"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          void handleNext();
+                        }}
+                        className="music-control h-11 w-11"
+                        aria-label="Next track"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-3">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-white/60">
+                          <Volume2 className="h-4 w-4" />
+                          <span className="text-xs">Volume</span>
+                        </div>
+                        <span className="text-xs text-white/48">{volume}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={volume}
+                        onChange={(event) => setVolume(Number(event.target.value))}
+                        className="music-slider h-2 w-full cursor-pointer appearance-none rounded-full bg-transparent"
+                        aria-label="Volume"
+                      />
+                    </div>
                   </div>
-                  <span className="text-xs text-white/48">{volume}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={volume}
-                  onChange={(event) => setVolume(Number(event.target.value))}
-                  className="music-slider h-2 w-full cursor-pointer appearance-none rounded-full bg-transparent"
-                  aria-label="Volume"
-                />
+
+                  <div className="w-1/2 pl-2">
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-3">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">Playlist</p>
+                          <p className="text-[11px] text-white/42">
+                            Select a track from the queue
+                          </p>
+                        </div>
+                        <span className="text-[11px] text-white/42">
+                          {playlistIds.length} tracks
+                        </span>
+                      </div>
+
+                      <div className="max-h-[17rem] space-y-2 overflow-y-auto pr-1">
+                        {playlistIds.length > 0 ? (
+                          playlistIds.map((videoId, index) => {
+                            const active = index === playlistIndex;
+
+                            return (
+                              <button
+                                key={videoId}
+                                onClick={() => {
+                                  void handleSelectTrack(index);
+                                }}
+                                className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
+                                  active
+                                    ? "border-sky-400/35 bg-sky-400/10"
+                                    : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.06]"
+                                }`}
+                              >
+                                <div className="mb-1 flex items-center justify-between gap-3">
+                                  <span className="text-[11px] uppercase tracking-[0.22em] text-white/38">
+                                    Track {String(index + 1).padStart(2, "0")}
+                                  </span>
+                                  {active && (
+                                    <span className="text-[11px] font-medium text-sky-300">
+                                      Current
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="line-clamp-2 text-sm font-medium text-white">
+                                  {getTrackLabel(videoId, index)}
+                                </p>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-white/10 px-3 py-6 text-center text-sm text-white/48">
+                            {loading ? "Loading playlist..." : "Open the player to load the playlist."}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
               </div>
             </motion.div>
           ) : (
