@@ -303,6 +303,39 @@ body {
   box-shadow: 0 0 22px rgba(44, 195, 255, 0.35);
 }
 
+.music-slider::-webkit-slider-runnable-track {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.music-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -0.3rem;
+  height: 1rem;
+  width: 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(135deg, var(--chat-accent-start), var(--chat-accent-end));
+  box-shadow: 0 0 16px rgba(44, 195, 255, 0.35);
+}
+
+.music-slider::-moz-range-track {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.music-slider::-moz-range-thumb {
+  height: 1rem;
+  width: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--chat-accent-start), var(--chat-accent-end));
+  box-shadow: 0 0 16px rgba(44, 195, 255, 0.35);
+}
+
 @keyframes blink {
   50% {
     opacity: 0;
