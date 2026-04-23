@@ -74,6 +74,7 @@ export const CONTEXT_OPTIONS: ContextOption[] = [
 ];
 
 export const COMPOSER_HINT = "Enter sends. Shift + Enter adds a new line.";
+export const META_SEPARATOR = " | ";
 
 export function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -119,7 +120,11 @@ export function buildMetaLabel({
     parts.push(`${chunksValidated ?? "?"}/${chunksRetrieved ?? "?"} chunks`);
   }
 
-  return parts.join(" · ");
+  return parts.join(META_SEPARATOR);
+}
+
+export function splitMetaLabel(meta: string) {
+  return meta.split(META_SEPARATOR);
 }
 
 export function resizeTextarea(
