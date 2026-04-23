@@ -3,97 +3,114 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Send,
-  Trash2,
-  Settings2,
-  X,
+  Bot,
+  ChevronDown,
   MessageCircle,
-  Minimize2,
+  Send,
+  Settings2,
+  Sparkles,
+  Trash2,
+  X,
 } from "lucide-react";
+import {
+  BASE_URL,
+  buildMetaLabel,
+  COMPOSER_HINT,
+  CONTEXT_OPTIONS,
+  createClearedMessage,
+  createWelcomeMessage,
+  Message,
+  Mode,
+  QUICK_PROMPTS,
+  resetTextareaHeight,
+  resizeTextarea,
+  Role,
+  uid,
+} from "@/reusable-components/chat/chatShared";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_AI_API_URL ?? "https://ai-dev.patrickcs-web.com";
+function renderMeta(meta?: string) {
+  if (!meta) return null;
 
-type Role = "user" | "assistant";
-type Mode = "stream" | "sync";
-
-interface Message {
-  id: string;
-  role: Role;
-  text: string;
-  context?: string;
-  supported?: boolean;
-  meta?: string;
+  return meta.split(" · ").map((part) => (
+    <span key={part} className="chat-meta-pill">
+      {part}
+    </span>
+  ));
 }
-
-function uid() {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-const WELCOME: Message = {
-  id: "welcome",
-  role: "assistant",
-  text: "Hi! I'm Patrick's personal AI. Ask me anything about his background, skills, projects, or experience.\n\nHỏi bằng tiếng Việt cũng được!",
-};
 
 export default function FloatingChat() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const [messages, setMessages] = useState<Message[]>([createWelcomeMessage()]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [mode, setMode] = useState<Mode>("stream");
-  const context = "auto";
-  const [sessionId] = useState("session-" + uid());
+  const [context, setContext] = useState("auto");
+  const [sessionId, setSessionId] = useState(`session-${uid()}`);
   const [showSettings, setShowSettings] = useState(false);
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
 
+  const openRef = useRef(open);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Focus input when opened
   useEffect(() => {
     if (open) {
       setHasUnread(false);
-      setTimeout(() => inputRef.current?.focus(), 300);
+      const timer = window.setTimeout(() => inputRef.current?.focus(), 220);
+      return () => window.clearTimeout(timer);
     }
   }, [open]);
 
+  useEffect(() => {
+    if (open && !sending) {
+      inputRef.current?.focus();
+    }
+  }, [open, sending]);
+
   const addMessage = useCallback(
     (role: Role, text: string, extra?: Partial<Message>) => {
-      const msg: Message = { id: uid(), role, text, ...extra };
-      setMessages((prev) => [...prev, msg]);
-      if (role === "assistant" && !open) setHasUnread(true);
-      return msg.id;
-    },
-    [open]
-  );
-
-  const updateMessage = useCallback(
-    (id: string, update: Partial<Message>) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, ...update } : m))
-      );
+      const message: Message = { id: uid(), role, text, ...extra };
+      setMessages((prev) => [...prev, message]);
+      if (role === "assistant" && !openRef.current) {
+        setHasUnread(true);
+      }
+      return message.id;
     },
     []
   );
 
-  const clearChat = () =>
-    setMessages([{ ...WELCOME, id: "welcome-" + uid(), text: "Chat cleared. Ask me anything!" }]);
+  const updateMessage = useCallback((id: string, update: Partial<Message>) => {
+    setMessages((prev) =>
+      prev.map((message) => (message.id === id ? { ...message, ...update } : message))
+    );
+  }, []);
 
-  // ── Send ────────────────────────────────────────────────────────
-  async function handleSend() {
-    const text = input.trim();
+  const clearChat = () => {
+    setMessages([createClearedMessage()]);
+    setStreamingId(null);
+    setInput("");
+    setHasUnread(false);
+    resetTextareaHeight(inputRef.current);
+    inputRef.current?.focus();
+  };
+
+  async function submitMessage(rawText: string) {
+    const text = rawText.trim();
     if (!text || sending) return;
 
     setInput("");
+    resetTextareaHeight(inputRef.current);
     setSending(true);
     addMessage("user", text);
 
@@ -101,10 +118,13 @@ export default function FloatingChat() {
     if (sessionId) body.session_id = sessionId;
 
     try {
-      if (mode === "stream") await sendStream(body);
-      else await sendSync(body);
-    } catch (err) {
-      addMessage("assistant", `Error: ${(err as Error).message}`, {
+      if (mode === "stream") {
+        await sendStream(body);
+      } else {
+        await sendSync(body);
+      }
+    } catch (error) {
+      addMessage("assistant", `Error: ${(error as Error).message}`, {
         supported: false,
       });
     } finally {
@@ -113,7 +133,10 @@ export default function FloatingChat() {
     }
   }
 
-  // ── SSE stream ──────────────────────────────────────────────────
+  async function handleSend() {
+    await submitMessage(input);
+  }
+
   async function sendStream(body: Record<string, string>) {
     const assistantId = uid();
     setMessages((prev) => [
@@ -122,27 +145,33 @@ export default function FloatingChat() {
     ]);
     setStreamingId(assistantId);
 
-    const resp = await fetch(`${BASE_URL}/api/v1/ai/chat/stream`, {
+    const response = await fetch(`${BASE_URL}/api/v1/ai/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
-    if (resp.status === 429) {
+    if (response.status === 429) {
       updateMessage(assistantId, {
-        text: "⚠️ Rate limit reached — please wait a minute.",
+        text: "Rate limit reached. Please wait a minute before sending another message.",
         supported: false,
       });
+      if (!openRef.current) setHasUnread(true);
       return;
     }
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
       throw new Error(
-        (err as Record<string, string>).error || `HTTP ${resp.status}`
+        (error as Record<string, string>).error || `HTTP ${response.status}`
       );
     }
 
-    const reader = resp.body!.getReader();
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("The stream could not be read.");
+    }
+
     const decoder = new TextDecoder();
     let buffer = "";
     let textContent = "";
@@ -153,9 +182,10 @@ export default function FloatingChat() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
-        buffer = lines.pop()!;
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
@@ -165,10 +195,12 @@ export default function FloatingChat() {
             textContent += payload.token;
             updateMessage(assistantId, { text: textContent });
           }
+
           if (payload.done) {
             supported = payload.supported !== false;
             if (payload.context) resolvedContext = payload.context;
           }
+
           if (payload.error) {
             textContent += `[Error: ${payload.error}]`;
             updateMessage(assistantId, { text: textContent });
@@ -177,62 +209,72 @@ export default function FloatingChat() {
         }
       }
     } finally {
-      const ctxLabel =
-        body.context === "auto" ? `auto → ${resolvedContext}` : resolvedContext;
       updateMessage(assistantId, {
-        text: textContent || "I don't have enough information to answer that.",
+        text: textContent || "I do not have enough information to answer that yet.",
         supported,
         context: resolvedContext,
-        meta: `${ctxLabel} · SSE`,
+        meta: buildMetaLabel({
+          requestedContext: body.context,
+          resolvedContext,
+          transport: "Live stream",
+        }),
       });
+      if (!openRef.current) setHasUnread(true);
     }
   }
 
-  // ── Sync ────────────────────────────────────────────────────────
   async function sendSync(body: Record<string, string>) {
-    const resp = await fetch(`${BASE_URL}/api/v1/ai/chat`, {
+    const response = await fetch(`${BASE_URL}/api/v1/ai/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
-    if (resp.status === 429) {
-      addMessage("assistant", "⚠️ Rate limit reached — please wait a minute.", {
-        supported: false,
-      });
+    if (response.status === 429) {
+      addMessage(
+        "assistant",
+        "Rate limit reached. Please wait a minute before sending another message.",
+        { supported: false }
+      );
       return;
     }
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
 
     const answer = data.data?.answer || "";
     const isSupported = data.data?.supported !== false;
     const meta = data.meta || {};
     const resolvedContext = meta.context || body.context;
-    const ctxLabel =
-      body.context === "auto" ? `auto → ${resolvedContext}` : resolvedContext;
 
     addMessage("assistant", answer, {
       supported: isSupported,
       context: resolvedContext,
-      meta: `${ctxLabel} · sync · ${meta.chunks_validated ?? "?"}/${meta.chunks_retrieved ?? "?"} chunks`,
+      meta: buildMetaLabel({
+        requestedContext: body.context,
+        resolvedContext,
+        transport: "Single response",
+        chunksValidated: meta.chunks_validated,
+        chunksRetrieved: meta.chunks_retrieved,
+      }),
     });
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSend();
     }
   }
 
+  const showQuickPrompts = messages.length <= 1 && !sending;
+
   return (
     <>
-      {/* ── Backdrop (mobile) ──────────────────────────────────── */}
       <AnimatePresence>
         {open && (
           <motion.div
-            className="fixed inset-0 z-40 sm:hidden bg-black/40"
+            className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -241,317 +283,344 @@ export default function FloatingChat() {
         )}
       </AnimatePresence>
 
-      {/* ── Chat panel ────────────────────────────────────────── */}
       <AnimatePresence>
         {open && (
           <motion.div
-            key="chat-panel"
-            initial={{ opacity: 0, y: "100%" }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: "100%" }}
-            transition={{ type: "spring", stiffness: 320, damping: 32 }}
-            style={{ transformOrigin: "bottom right" }}
-            className={[
-              "fixed z-50 flex flex-col overflow-hidden",
-              "bottom-0 right-0 sm:bottom-24 sm:right-6",
-              "w-full sm:w-[400px]",
-              "h-[100dvh] sm:h-[560px]",
-              "sm:rounded-2xl shadow-2xl shadow-black/50",
-              "bg-[#13151f] border-0 sm:border border-white/10",
-            ].join(" ")}
+            key="floating-chat-panel"
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 26 }}
+            className="fixed inset-0 z-50 flex flex-col chat-shell sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[640px] sm:w-[420px] sm:rounded-[30px]"
           >
-            {/* ── Mobile header (full-screen) ── */}
-            <div className="flex sm:hidden items-center px-3 py-3 border-b border-white/5 bg-[#1a1d27] flex-shrink-0 pt-[env(safe-area-inset-top,12px)]">
-              <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setOpen(false)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/10 text-white mr-3"
-                aria-label="Close chat"
-              >
-                <X className="w-5 h-5" />
-              </motion.button>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate leading-tight">Patrick AI</p>
-                <p className="text-[11px] text-white/40 truncate">RAG + LLM · Hỗ trợ tiếng Việt</p>
+            <div className="flex items-start gap-3 border-b border-white/10 px-4 py-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-5 sm:py-5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-sm font-semibold text-white shadow-lg shadow-sky-500/20">
+                P
               </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <span className="chat-status-pill">
+                    <Sparkles className="h-3.5 w-3.5 text-sky-300" />
+                    Live assistant
+                  </span>
+                  <span className="chat-status-pill">
+                    <Bot className="h-3.5 w-3.5 text-indigo-300" />
+                    English + Vietnamese
+                  </span>
+                </div>
+                <p className="text-base font-semibold text-white">Patrick AI</p>
+                <p className="mt-1 text-sm leading-5 text-white/58">
+                  Ask about projects, product thinking, experience, or the tools Patrick
+                  likes building with.
+                </p>
+              </div>
+
               <div className="flex items-center gap-1">
                 <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-                  aria-label="Settings"
+                  whileTap={{ scale: 0.94 }}
+                  onClick={() => setShowSettings((prev) => !prev)}
+                  className="chat-toolbar-button h-10 w-10"
+                  aria-label="Toggle chat settings"
                 >
-                  <Settings2 className="w-4 h-4" />
+                  <Settings2 className="h-4 w-4" />
                 </motion.button>
                 <motion.button
-                  whileTap={{ scale: 0.9 }}
+                  whileTap={{ scale: 0.94 }}
                   onClick={clearChat}
-                  className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+                  className="chat-toolbar-button h-10 w-10"
                   aria-label="Clear chat"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="h-4 w-4" />
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.94 }}
+                  onClick={() => setOpen(false)}
+                  className="chat-toolbar-button h-10 w-10"
+                  aria-label="Close chat"
+                >
+                  <X className="h-4 w-4" />
                 </motion.button>
               </div>
             </div>
 
-            {/* ── Desktop header ── */}
-            <div className="hidden sm:flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-[#1a1d27] flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-indigo-500/30">
-                P
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate leading-tight">
-                  Patrick AI
-                </p>
-                <p className="text-[11px] text-white/40 truncate">
-                  RAG + LLM · Hỗ trợ tiếng Việt
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-                  aria-label="Settings"
-                >
-                  <Settings2 className="w-3.5 h-3.5" />
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={clearChat}
-                  className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-                  aria-label="Clear chat"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setOpen(false)}
-                  className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-                  aria-label="Minimize"
-                >
-                  <Minimize2 className="w-3.5 h-3.5" />
-                </motion.button>
-              </div>
-            </div>
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
               {showSettings && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden border-b border-white/5 flex-shrink-0 bg-[#0f1117]"
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="overflow-hidden border-b border-white/10"
                 >
-                  <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                    {/* Mode toggle */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-white/40">Mode</span>
-                      <div className="flex bg-white/5 rounded-md p-0.5 border border-white/10">
-                        {(["stream", "sync"] as const).map((m) => (
+                  <div className="grid gap-3 px-4 py-4 sm:px-5">
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                      <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
+                        Context
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={context}
+                          onChange={(event) => setContext(event.target.value)}
+                          className="w-full appearance-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-10 text-sm text-white outline-none transition focus:border-sky-400/50"
+                        >
+                          {CONTEXT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                      <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
+                        Delivery mode
+                      </label>
+                      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
+                        {(["stream", "sync"] as const).map((item) => (
                           <button
-                            key={m}
-                            onClick={() => setMode(m)}
-                            className={`px-2.5 py-0.5 text-[11px] rounded transition-all ${
-                              mode === m
-                                ? "bg-indigo-600 text-white"
-                                : "text-white/40 hover:text-white"
+                            key={item}
+                            onClick={() => setMode(item)}
+                            className={`rounded-xl px-3 py-2 text-sm transition-all ${
+                              mode === item
+                                ? "bg-white text-slate-950 shadow-sm"
+                                : "text-white/60 hover:text-white"
                             }`}
                           >
-                            {m === "stream" ? "Stream" : "Sync"}
+                            {item === "stream" ? "Live stream" : "Single reply"}
                           </button>
                         ))}
                       </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                      <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
+                        Session
+                      </label>
+                      <input
+                        type="text"
+                        value={sessionId}
+                        onChange={(event) => setSessionId(event.target.value)}
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
+                      />
                     </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Messages */}
             <div
               ref={chatRef}
-              className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+              className="chat-scroll-fade flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5"
             >
-              <AnimatePresence initial={false}>
-                {messages.map((msg) => (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 10, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.25 }}
-                    className={`flex gap-2.5 ${
-                      msg.role === "user"
-                        ? "justify-end"
-                        : "justify-start"
-                    }`}
-                  >
-                    {msg.role === "assistant" && (
-                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-1">
-                        P
-                      </div>
-                    )}
-                    <div className="flex flex-col gap-1 max-w-[78%]">
-                      <div
-                        className={[
-                          "px-3 py-2 rounded-2xl text-[13px] leading-relaxed whitespace-pre-wrap break-words",
-                          msg.role === "user"
-                            ? "bg-indigo-600 text-white rounded-br-sm"
-                            : msg.supported === false
-                              ? "bg-red-500/10 border border-red-500/20 text-red-300 rounded-bl-sm"
-                              : "bg-[#1e2130] text-white/90 rounded-bl-sm",
-                        ].join(" ")}
-                      >
-                        {msg.text}
-                        {streamingId === msg.id && msg.text === "" && (
-                          <span className="flex gap-1 py-0.5">
-                            {[0, 1, 2].map((i) => (
-                              <motion.span
-                                key={i}
-                                className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block"
-                                animate={{ opacity: [0.3, 1, 0.3] }}
-                                transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
-                              />
-                            ))}
-                          </span>
-                        )}
-                        {streamingId === msg.id && msg.text !== "" && (
-                          <span className="inline-block w-0.5 h-3.5 bg-indigo-400 ml-0.5 align-text-bottom cursor-blink" />
-                        )}
-                      </div>
-                      {msg.meta && (
-                        <span className="text-[10px] text-white/25 font-mono px-1">
-                          {msg.meta}
-                        </span>
-                      )}
-                    </div>
-                    {msg.role === "user" && (
-                      <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-1">
-                        U
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
-              {/* Typing indicator */}
-              {sending && !streamingId && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex gap-2.5 justify-start"
-                >
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-                    P
-                  </div>
-                  <div className="bg-[#1e2130] px-3 py-2.5 rounded-2xl rounded-bl-sm">
-                    <div className="flex gap-1">
-                      {[0, 1, 2].map((i) => (
-                        <motion.div
-                          key={i}
-                          className="w-1.5 h-1.5 rounded-full bg-indigo-400"
-                          animate={{ opacity: [0.3, 1, 0.3] }}
-                          transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </motion.div>
+              {showQuickPrompts && (
+                <div className="mb-5 flex flex-wrap gap-2">
+                  {QUICK_PROMPTS.slice(0, 3).map((prompt) => (
+                    <button
+                      key={prompt.label}
+                      onClick={() => {
+                        void submitMessage(prompt.prompt);
+                      }}
+                      disabled={sending}
+                      className="chat-chip px-3.5 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Sparkles className="h-3 w-3 text-sky-300" />
+                      {prompt.label}
+                    </button>
+                  ))}
+                </div>
               )}
+
+              <div className="space-y-4 pb-5">
+                <AnimatePresence initial={false}>
+                  {messages.map((message) => {
+                    const isUser = message.role === "user";
+                    const isError = message.supported === false;
+
+                    return (
+                      <motion.div
+                        key={message.id}
+                        initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.24, ease: "easeOut" }}
+                        className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`flex max-w-[92%] items-end gap-2.5 ${
+                            isUser ? "flex-row-reverse" : ""
+                          }`}
+                        >
+                          <div
+                            className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl text-[11px] font-semibold ${
+                              isUser
+                                ? "bg-white/10 text-white"
+                                : "bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-white shadow-lg shadow-sky-500/20"
+                            }`}
+                          >
+                            {isUser ? "You" : "AI"}
+                          </div>
+
+                          <div className="min-w-0">
+                            <div
+                              className={`mb-1 flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.22em] text-white/34 ${
+                                isUser ? "justify-end" : "justify-start"
+                              }`}
+                            >
+                              <span>{isUser ? "You" : "Patrick AI"}</span>
+                            </div>
+
+                            <div
+                              className={`rounded-[22px] px-4 py-3 text-sm leading-6 text-white/90 ${
+                                isUser
+                                  ? "chat-user-bubble rounded-br-lg"
+                                  : isError
+                                    ? "rounded-bl-lg border border-red-400/30 bg-red-500/10 text-red-100"
+                                    : "chat-assistant-bubble rounded-bl-lg"
+                              }`}
+                            >
+                              {message.text}
+                              {streamingId === message.id && (
+                                <span className="ml-1 inline-block h-3.5 w-0.5 align-text-bottom cursor-blink bg-sky-300" />
+                              )}
+                            </div>
+
+                            {message.meta && (
+                              <div
+                                className={`mt-2 flex flex-wrap gap-2 ${
+                                  isUser ? "justify-end" : "justify-start"
+                                }`}
+                              >
+                                {renderMeta(message.meta)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+
+                {sending && !streamingId && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex justify-start"
+                  >
+                    <div className="flex items-end gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-[11px] font-semibold text-white shadow-lg shadow-sky-500/20">
+                        AI
+                      </div>
+                      <div className="chat-assistant-bubble rounded-[22px] rounded-bl-lg px-4 py-3">
+                        <div className="flex gap-1.5">
+                          {[0, 1, 2].map((dot) => (
+                            <motion.div
+                              key={dot}
+                              className="h-1.5 w-1.5 rounded-full bg-sky-300"
+                              animate={{ opacity: [0.28, 1, 0.28], y: [0, -2, 0] }}
+                              transition={{
+                                duration: 0.9,
+                                repeat: Infinity,
+                                delay: dot * 0.12,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
             </div>
 
-            {/* Input */}
-            <div className="flex-shrink-0 border-t border-white/5 bg-[#1a1d27] px-3 py-3 pb-[env(safe-area-inset-bottom,12px)]">
-              <div className="flex items-end gap-2">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  disabled={sending}
-                  placeholder="Ask about Patrick…"
-                  rows={1}
-                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-base sm:text-[13px] text-white placeholder:text-white/30 outline-none focus:border-indigo-500 transition resize-none min-h-[38px] max-h-[100px]"
-                  onInput={(e) => {
-                    const el = e.currentTarget;
-                    el.style.height = "auto";
-                    el.style.height = Math.min(el.scrollHeight, 100) + "px";
-                  }}
-                />
-                <motion.button
-                  onClick={handleSend}
-                  disabled={!input.trim() || sending}
-                  whileHover={{ scale: 1.08 }}
-                  whileTap={{ scale: 0.92 }}
-                  className="p-2.5 rounded-xl bg-indigo-600 text-white disabled:bg-white/5 disabled:text-white/20 transition-colors shadow-lg shadow-indigo-600/30 disabled:shadow-none flex-shrink-0"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </motion.button>
+            <div className="border-t border-white/10 px-3 py-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-4 sm:py-4">
+              <div className="chat-input-shell rounded-[24px] p-2.5 sm:p-3">
+                <div className="flex items-start gap-2.5">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={sending}
+                    placeholder="Ask about Patrick's projects, strengths, or stack..."
+                    rows={1}
+                    className="min-h-[48px] max-h-[140px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/35"
+                    onInput={(event) => resizeTextarea(event.currentTarget, 140)}
+                  />
+                  <motion.button
+                    onClick={() => {
+                      void handleSend();
+                    }}
+                    disabled={!input.trim() || sending}
+                    whileHover={{ scale: input.trim() && !sending ? 1.02 : 1 }}
+                    whileTap={{ scale: input.trim() && !sending ? 0.96 : 1 }}
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+                    aria-label="Send message"
+                  >
+                    <Send className="h-4 w-4" />
+                  </motion.button>
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-2">
+                  <p className="text-[11px] text-white/40">{COMPOSER_HINT}</p>
+                  <p className="text-[11px] text-white/40">
+                    {sending
+                      ? "Drafting..."
+                      : mode === "stream"
+                        ? "Live stream on"
+                        : "Single reply on"}
+                  </p>
+                </div>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── FAB button — hidden on mobile when chat is open (header has close btn) */}
-      <div className={`fixed bottom-6 right-4 sm:right-6 z-50 ${open ? "hidden sm:block" : ""}`}>
-        {/* Pulse ring */}
-        {!open && (
-          <motion.div
-            className="absolute inset-0 rounded-full bg-indigo-500/30"
-            animate={{ scale: [1, 1.6], opacity: [0.6, 0] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
-          />
-        )}
+      {!open && (
+        <div className="fixed bottom-5 right-4 z-50 sm:bottom-6 sm:right-6">
+          <motion.button
+            onClick={() => setOpen(true)}
+            aria-label="Open Patrick AI chat"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            className="chat-fab relative flex h-14 w-14 items-center justify-center rounded-full p-0 text-white sm:h-auto sm:w-auto sm:min-w-[18rem] sm:justify-start sm:gap-3 sm:px-3.5 sm:py-3"
+          >
+            <motion.span
+              className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(44,195,255,0.18),transparent_70%)] sm:rounded-[999px]"
+              animate={{ scale: [1, 1.08, 1], opacity: [0.75, 1, 0.75] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+            />
 
-        <motion.button
-          onClick={() => setOpen(!open)}
-          aria-label={open ? "Close chat" : "Open AI chat"}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-indigo-500/40 text-white"
-        >
-          <AnimatePresence mode="wait">
-            {open ? (
-              <motion.span
-                key="close"
-                initial={{ opacity: 0, rotate: -90, scale: 0.5 }}
-                animate={{ opacity: 1, rotate: 0, scale: 1 }}
-                exit={{ opacity: 0, rotate: 90, scale: 0.5 }}
-                transition={{ duration: 0.2 }}
-              >
-                <X className="w-5 h-5" />
-              </motion.span>
-            ) : (
-              <motion.span
-                key="open"
-                initial={{ opacity: 0, rotate: 90, scale: 0.5 }}
-                animate={{ opacity: 1, rotate: 0, scale: 1 }}
-                exit={{ opacity: 0, rotate: -90, scale: 0.5 }}
-                transition={{ duration: 0.2 }}
-              >
-                <MessageCircle className="w-5 h-5" />
-              </motion.span>
-            )}
-          </AnimatePresence>
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] shadow-lg shadow-sky-500/20">
+              <MessageCircle className="h-5 w-5" />
+            </span>
 
-          {/* Unread badge */}
-          <AnimatePresence>
-            {hasUnread && !open && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 border-2 border-[#0f1117] text-[9px] font-bold text-white flex items-center justify-center"
-              >
-                •
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
-      </div>
+            <span className="relative hidden min-w-0 text-left sm:block">
+              <span className="block text-[10px] uppercase tracking-[0.24em] text-white/45">
+                Patrick AI
+              </span>
+              <span className="block truncate text-sm font-medium text-white">
+                Ask about projects, experience, or tech stack
+              </span>
+            </span>
+
+            <AnimatePresence>
+              {hasUnread && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-slate-950 bg-rose-500 text-[9px] font-bold text-white sm:right-2 sm:top-2"
+                >
+                  1
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
+        </div>
+      )}
     </>
   );
 }

@@ -1,42 +1,53 @@
 @import "tailwindcss";
 
-/* ── Custom scrollbar ──────────────────────────────────────────── */
+:root {
+  --chat-accent-start: #5b7cff;
+  --chat-accent-end: #2cc3ff;
+  --chat-highlight: rgba(91, 124, 255, 0.24);
+  --chat-border: rgba(255, 255, 255, 0.11);
+  --chat-surface: rgba(6, 11, 24, 0.76);
+  --chat-surface-strong: rgba(4, 8, 18, 0.9);
+  --chat-soft: rgba(255, 255, 255, 0.08);
+}
+
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.4);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.7);
+  background: rgba(91, 124, 255, 0.45);
+  border-radius: 999px;
 }
 
-/* ── Global ────────────────────────────────────────────────────── */
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(91, 124, 255, 0.75);
+}
+
 html {
   scroll-behavior: smooth;
 }
 
 body {
   overflow: hidden;
+  background: #050816;
+  color: #f8fafc;
 }
 
-/* ── Selection color ──────────────────────────────────────────── */
 ::selection {
-  background: rgba(99, 102, 241, 0.3);
+  background: rgba(91, 124, 255, 0.35);
   color: #fff;
 }
 
-/* ── Smooth focus ring ────────────────────────────────────────── */
 *:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.6);
+  outline: 2px solid rgba(44, 195, 255, 0.65);
   outline-offset: 2px;
 }
 
-/* ── Glass card utility ───────────────────────────────────────── */
 .glass {
   background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(12px);
@@ -51,18 +62,196 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* ── Gradient text utility ────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
+  background: linear-gradient(135deg, #5b7cff, #2cc3ff, #9cd4ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* ── Cursor blink for chatbot ─────────────────────────────────── */
-@keyframes blink {
-  50% { opacity: 0; }
+.chat-shell {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--chat-border);
+  background:
+    linear-gradient(180deg, rgba(10, 18, 36, 0.92), rgba(3, 7, 17, 0.9)),
+    var(--chat-surface);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow:
+    0 32px 90px rgba(2, 6, 23, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
+
+.chat-shell::before {
+  content: "";
+  position: absolute;
+  inset: -25% -10% auto;
+  height: 70%;
+  background:
+    radial-gradient(circle at top left, rgba(44, 195, 255, 0.2), transparent 38%),
+    radial-gradient(circle at top center, rgba(91, 124, 255, 0.16), transparent 42%),
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.12), transparent 32%);
+  pointer-events: none;
+}
+
+.chat-shell::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+
+.chat-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.chat-scroll-fade {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 36px,
+    black calc(100% - 48px),
+    transparent 100%
+  );
+}
+
+.chat-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.72);
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.chat-toolbar-button:hover {
+  transform: translateY(-1px);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.chat-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.chat-assistant-bubble {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04)),
+    var(--chat-surface-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 40px rgba(2, 6, 23, 0.22);
+}
+
+.chat-user-bubble {
+  background: linear-gradient(135deg, var(--chat-accent-start), var(--chat-accent-end));
+  box-shadow:
+    0 18px 36px rgba(44, 195, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.chat-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.68rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.chat-input-shell {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
+    rgba(3, 7, 17, 0.86);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 40px rgba(2, 6, 23, 0.2);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.chat-input-shell:focus-within {
+  border-color: rgba(44, 195, 255, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 4px rgba(44, 195, 255, 0.1),
+    0 18px 40px rgba(2, 6, 23, 0.24);
+}
+
+.chat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.76);
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.chat-chip:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(44, 195, 255, 0.22);
+}
+
+.chat-fab {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(135deg, rgba(16, 24, 47, 0.94), rgba(7, 10, 18, 0.98)),
+    rgba(3, 7, 17, 0.95);
+  box-shadow:
+    0 20px 45px rgba(2, 6, 23, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 .cursor-blink {
   animation: blink 0.6s step-end infinite;
+}
+
+@media (max-width: 640px) {
+  .chat-scroll-fade {
+    mask-image: none;
+  }
 }

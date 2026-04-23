@@ -2,57 +2,69 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Trash2, Settings2, ChevronDown } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  Send,
+  Settings2,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import PageWrapper from "@/reusable-components/PageWrapper";
+import {
+  BASE_URL,
+  buildMetaLabel,
+  COMPOSER_HINT,
+  CONTEXT_OPTIONS,
+  createClearedMessage,
+  createWelcomeMessage,
+  Message,
+  Mode,
+  QUICK_PROMPTS,
+  resetTextareaHeight,
+  resizeTextarea,
+  Role,
+  uid,
+} from "@/reusable-components/chat/chatShared";
 
-const BASE_URL = process.env.NEXT_PUBLIC_AI_API_URL ?? "https://ai-dev.patrickcs-web.com";
+function renderMeta(meta?: string) {
+  if (!meta) return null;
 
-type Role = "user" | "assistant";
-type Mode = "stream" | "sync";
-
-interface Message {
-  id: string;
-  role: Role;
-  text: string;
-  context?: string;
-  supported?: boolean;
-  meta?: string;
-}
-
-function uid() {
-  return Math.random().toString(36).slice(2, 10);
+  return meta.split(" · ").map((part) => (
+    <span key={part} className="chat-meta-pill">
+      {part}
+    </span>
+  ));
 }
 
 export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      text: "Hi! I'm Patrick's personal AI. Ask me anything about his background, skills, projects, or experience.\n\nHỏi bằng tiếng Việt cũng được!",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([createWelcomeMessage()]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [mode, setMode] = useState<Mode>("stream");
   const [context, setContext] = useState("auto");
-  const [sessionId, setSessionId] = useState("session-" + uid());
+  const [sessionId, setSessionId] = useState(`session-${uid()}`);
   const [showSettings, setShowSettings] = useState(false);
   const [streamingId, setStreamingId] = useState<string | null>(null);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!sending) {
+      inputRef.current?.focus();
+    }
+  }, [sending]);
 
   const addMessage = useCallback(
     (role: Role, text: string, extra?: Partial<Message>) => {
@@ -65,26 +77,24 @@ export default function Chat() {
 
   const updateMessage = useCallback((id: string, update: Partial<Message>) => {
     setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, ...update } : m))
+      prev.map((message) => (message.id === id ? { ...message, ...update } : message))
     );
   }, []);
 
   const clearChat = () => {
-    setMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        text: "Chat cleared. Ask me anything!",
-      },
-    ]);
+    setMessages([createClearedMessage()]);
+    setStreamingId(null);
+    setInput("");
+    resetTextareaHeight(inputRef.current);
+    inputRef.current?.focus();
   };
 
-  // ── Send message ──────────────────────────────────────────────────
-  async function handleSend() {
-    const text = input.trim();
+  async function submitMessage(rawText: string) {
+    const text = rawText.trim();
     if (!text || sending) return;
 
     setInput("");
+    resetTextareaHeight(inputRef.current);
     setSending(true);
     addMessage("user", text);
 
@@ -97,8 +107,8 @@ export default function Chat() {
       } else {
         await sendSync(body);
       }
-    } catch (err) {
-      addMessage("assistant", `Error: ${(err as Error).message}`, {
+    } catch (error) {
+      addMessage("assistant", `Error: ${(error as Error).message}`, {
         supported: false,
       });
     } finally {
@@ -107,7 +117,10 @@ export default function Chat() {
     }
   }
 
-  // ── SSE streaming ─────────────────────────────────────────────────
+  async function handleSend() {
+    await submitMessage(input);
+  }
+
   async function sendStream(body: Record<string, string>) {
     const assistantId = uid();
     setMessages((prev) => [
@@ -116,28 +129,32 @@ export default function Chat() {
     ]);
     setStreamingId(assistantId);
 
-    const resp = await fetch(`${BASE_URL}/api/v1/ai/chat/stream`, {
+    const response = await fetch(`${BASE_URL}/api/v1/ai/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
-    if (resp.status === 429) {
+    if (response.status === 429) {
       updateMessage(assistantId, {
-        text: "⚠️ Rate limit reached — please wait a minute before sending more messages.",
+        text: "Rate limit reached. Please wait a minute before sending another message.",
         supported: false,
       });
       return;
     }
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
       throw new Error(
-        (err as Record<string, string>).error || `HTTP ${resp.status}`
+        (error as Record<string, string>).error || `HTTP ${response.status}`
       );
     }
 
-    const reader = resp.body!.getReader();
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("The stream could not be read.");
+    }
+
     const decoder = new TextDecoder();
     let buffer = "";
     let textContent = "";
@@ -148,10 +165,10 @@ export default function Chat() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
 
+        buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
-        buffer = lines.pop()!;
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
@@ -175,283 +192,362 @@ export default function Chat() {
         }
       }
     } finally {
-      const ctxLabel =
-        body.context === "auto"
-          ? `auto → ${resolvedContext}`
-          : resolvedContext;
       updateMessage(assistantId, {
-        text: textContent || "I don't have enough information to answer that.",
+        text: textContent || "I do not have enough information to answer that yet.",
         supported,
         context: resolvedContext,
-        meta: `${ctxLabel} · SSE stream`,
+        meta: buildMetaLabel({
+          requestedContext: body.context,
+          resolvedContext,
+          transport: "Live stream",
+        }),
       });
     }
   }
 
-  // ── Sync request ──────────────────────────────────────────────────
   async function sendSync(body: Record<string, string>) {
-    const resp = await fetch(`${BASE_URL}/api/v1/ai/chat`, {
+    const response = await fetch(`${BASE_URL}/api/v1/ai/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
-    if (resp.status === 429) {
+    if (response.status === 429) {
       addMessage(
         "assistant",
-        "⚠️ Rate limit reached — please wait a minute.",
+        "Rate limit reached. Please wait a minute before sending another message.",
         { supported: false }
       );
       return;
     }
 
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
 
     const answer = data.data?.answer || "";
     const isSupported = data.data?.supported !== false;
     const meta = data.meta || {};
     const resolvedContext = meta.context || body.context;
-    const ctxLabel =
-      body.context === "auto" ? `auto → ${resolvedContext}` : resolvedContext;
 
     addMessage("assistant", answer, {
       supported: isSupported,
       context: resolvedContext,
-      meta: `${ctxLabel} · sync · ${meta.chunks_validated ?? "?"}/${meta.chunks_retrieved ?? "?"} chunks`,
+      meta: buildMetaLabel({
+        requestedContext: body.context,
+        resolvedContext,
+        transport: "Single response",
+        chunksValidated: meta.chunks_validated,
+        chunksRetrieved: meta.chunks_retrieved,
+      }),
     });
   }
 
-  // ── Key handler ───────────────────────────────────────────────────
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSend();
     }
   }
 
+  const showQuickPrompts = messages.length <= 1 && !sending;
+
   return (
-    <PageWrapper className="flex flex-col h-[calc(100vh-70px)]">
-      {/* ── Header bar ────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-4 sm:px-6 py-3 glass border-b border-white/5 flex-shrink-0">
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-sm font-bold text-white shadow-lg">
-          P
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-sm font-semibold text-white truncate">
-            Patrick AI / Trợ Lý AI
-          </h1>
-          <p className="text-xs text-white/40 truncate">
-            This is an AI representation for me - it was trained on my resume, projects, and profile to answer questions about my background and experience. It can also chat in Vietnamese!
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
-            aria-label="Settings"
-          >
-            <Settings2 className="w-4 h-4" />
-          </motion.button>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={clearChat}
-            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-colors"
-            aria-label="Clear chat"
-          >
-            <Trash2 className="w-4 h-4" />
-          </motion.button>
-        </div>
-      </div>
-
-      {/* ── Settings panel ────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden border-b border-white/5 flex-shrink-0"
-          >
-            <div className="flex flex-wrap items-center gap-4 px-4 sm:px-6 py-3 bg-white/[0.03]">
-              {/* Context */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-white/40">Context</label>
-                <div className="relative">
-                  <select
-                    value={context}
-                    onChange={(e) => setContext(e.target.value)}
-                    className="appearance-none bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-1.5 pr-7 outline-none focus:border-indigo-500 transition"
-                  >
-                    <option value="auto">✦ Auto-detect</option>
-                    <option value="profile">profile</option>
-                    <option value="projects">projects</option>
-                    <option value="portfolio">portfolio</option>
-                    <option value="general">general</option>
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-white/40 pointer-events-none" />
-                </div>
+    <PageWrapper className="min-h-[calc(100dvh-72px)] px-3 py-3 sm:px-5 sm:py-5">
+      <div className="mx-auto flex h-[calc(100dvh-96px)] max-w-6xl flex-col rounded-[30px] chat-shell">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 px-5 py-5 sm:px-8 sm:py-6">
+          <div className="min-w-0 flex-1">
+            <div className="mb-3 flex flex-wrap gap-2">
+              <span className="chat-status-pill">
+                <Sparkles className="h-3.5 w-3.5 text-sky-300" />
+                Knowledge-aware assistant
+              </span>
+              <span className="chat-status-pill">
+                <Bot className="h-3.5 w-3.5 text-indigo-300" />
+                English + Vietnamese
+              </span>
+            </div>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-base font-semibold text-white shadow-lg shadow-sky-500/20">
+                P
               </div>
-
-              {/* Mode toggle */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-white/40">Mode</label>
-                <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/10">
-                  {(["stream", "sync"] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMode(m)}
-                      className={`px-3 py-1 text-xs rounded-md transition-all ${
-                        mode === m
-                          ? "bg-indigo-600 text-white shadow"
-                          : "text-white/50 hover:text-white"
-                      }`}
-                    >
-                      {m === "stream" ? "Stream (SSE)" : "Sync"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Session ID */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-white/40">Session</label>
-                <input
-                  type="text"
-                  value={sessionId}
-                  onChange={(e) => setSessionId(e.target.value)}
-                  className="bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-1.5 w-36 outline-none focus:border-indigo-500 transition"
-                />
+              <div className="min-w-0">
+                <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                  Chat with Patrick AI
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60 sm:text-[15px]">
+                  Ask about experience, projects, product thinking, engineering depth,
+                  or the stack Patrick enjoys building with. Responses stream in live
+                  and can switch sources automatically when needed.
+                </p>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
 
-      {/* ── Messages ──────────────────────────────────────────────── */}
-      <div
-        ref={chatRef}
-        className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-4"
-      >
-        <AnimatePresence initial={false}>
-          {messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 12, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.3 }}
-              className={`flex gap-3 max-w-3xl ${
-                msg.role === "user"
-                  ? "ml-auto flex-row-reverse"
-                  : "mr-auto"
-              }`}
+          <div className="flex items-center gap-2">
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={() => setShowSettings((prev) => !prev)}
+              className="chat-toolbar-button px-3 py-2 text-sm"
+              aria-label="Toggle chat settings"
             >
-              {/* Avatar */}
-              <div
-                className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                  msg.role === "user"
-                    ? "bg-gray-600 text-white"
-                    : "bg-gradient-to-br from-indigo-500 to-purple-500 text-white"
-                }`}
-              >
-                {msg.role === "user" ? "U" : "P"}
-              </div>
+              <Settings2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={clearChat}
+              className="chat-toolbar-button px-3 py-2 text-sm"
+              aria-label="Clear chat"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Reset</span>
+            </motion.button>
+          </div>
+        </div>
 
-              {/* Bubble */}
-              <div className="flex flex-col gap-1 min-w-0">
-                <div
-                  className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                    msg.role === "user"
-                      ? "bg-indigo-600 text-white rounded-br-md"
-                      : msg.supported === false
-                        ? "bg-red-500/10 border border-red-500/20 text-red-300 rounded-bl-md"
-                        : "glass text-white/90 rounded-bl-md"
-                  }`}
-                >
-                  {msg.text}
-                  {streamingId === msg.id && (
-                    <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 align-text-bottom cursor-blink" />
-                  )}
+        <AnimatePresence initial={false}>
+          {showSettings && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.24, ease: "easeOut" }}
+              className="overflow-hidden border-b border-white/10"
+            >
+              <div className="grid gap-3 px-5 py-4 sm:grid-cols-3 sm:px-8">
+                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                  <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
+                    Context
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={context}
+                      onChange={(event) => setContext(event.target.value)}
+                      className="w-full appearance-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 pr-10 text-sm text-white outline-none transition focus:border-sky-400/50"
+                    >
+                      {CONTEXT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-white/45">
+                    {
+                      CONTEXT_OPTIONS.find((option) => option.value === context)
+                        ?.description
+                    }
+                  </p>
                 </div>
 
-                {/* Meta badge */}
-                {msg.meta && (
-                  <span className="text-[10px] text-white/30 font-mono px-1">
-                    {msg.context && (
-                      <span className="inline-block bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-indigo-400 mr-1">
-                        {msg.meta.includes("auto →") ? "✦ " : ""}
-                        {msg.context}
-                      </span>
-                    )}
-                    {msg.meta}
-                  </span>
-                )}
+                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                  <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
+                    Delivery mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
+                    {(["stream", "sync"] as const).map((item) => (
+                      <button
+                        key={item}
+                        onClick={() => setMode(item)}
+                        className={`rounded-xl px-3 py-2 text-sm transition-all ${
+                          mode === item
+                            ? "bg-white text-slate-950 shadow-sm"
+                            : "text-white/60 hover:text-white"
+                        }`}
+                      >
+                        {item === "stream" ? "Live stream" : "Single reply"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-white/45">
+                    Stream feels more conversational. Single reply is better for a
+                    one-shot answer.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                  <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
+                    Session
+                  </label>
+                  <input
+                    type="text"
+                    value={sessionId}
+                    onChange={(event) => setSessionId(event.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/50"
+                  />
+                  <p className="mt-2 text-xs leading-5 text-white/45">
+                    Keep this stable if you want the backend to preserve context
+                    across messages.
+                  </p>
+                </div>
               </div>
             </motion.div>
-          ))}
+          )}
         </AnimatePresence>
 
-        {/* Typing indicator */}
-        {sending && !streamingId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex gap-3 max-w-3xl"
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-              P
+        <div
+          ref={chatRef}
+          className="chat-scroll-fade flex-1 overflow-y-auto px-5 py-6 sm:px-8"
+        >
+          {showQuickPrompts && (
+            <div className="mb-6 flex flex-wrap gap-2">
+              {QUICK_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt.label}
+                  onClick={() => {
+                    void submitMessage(prompt.prompt);
+                  }}
+                  disabled={sending}
+                  className="chat-chip px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-sky-300" />
+                  {prompt.label}
+                </button>
+              ))}
             </div>
-            <div className="glass px-4 py-3 rounded-2xl rounded-bl-md">
-              <div className="flex gap-1.5">
-                {[0, 1, 2].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="w-2 h-2 rounded-full bg-indigo-400"
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      delay: i * 0.2,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </div>
+          )}
 
-      {/* ── Input bar ─────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-t border-white/5 glass">
-        <div className="flex items-end gap-3 px-4 sm:px-6 py-3 max-w-3xl mx-auto">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={sending}
-            placeholder="Ask about Patrick… / Hỏi bằng tiếng Việt…"
-            rows={1}
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-indigo-500 transition resize-none min-h-[44px] max-h-[140px]"
-            style={{ height: "auto" }}
-            onInput={(e) => {
-              const el = e.currentTarget;
-              el.style.height = "auto";
-              el.style.height = Math.min(el.scrollHeight, 140) + "px";
-            }}
-          />
-          <motion.button
-            onClick={handleSend}
-            disabled={!input.trim() || sending}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="p-3 rounded-xl bg-indigo-600 text-white disabled:bg-white/5 disabled:text-white/20 transition-colors shadow-lg shadow-indigo-600/30 disabled:shadow-none"
-          >
-            <Send className="w-4 h-4" />
-          </motion.button>
+          <div className="space-y-5 pb-6">
+            <AnimatePresence initial={false}>
+              {messages.map((message) => {
+                const isUser = message.role === "user";
+                const isError = message.supported === false;
+
+                return (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.28, ease: "easeOut" }}
+                    className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`flex max-w-4xl items-end gap-3 ${
+                        isUser ? "flex-row-reverse" : ""
+                      }`}
+                    >
+                      <div
+                        className={`mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-xs font-semibold ${
+                          isUser
+                            ? "bg-white/10 text-white"
+                            : "bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-white shadow-lg shadow-sky-500/20"
+                        }`}
+                      >
+                        {isUser ? "You" : "AI"}
+                      </div>
+
+                      <div className={`min-w-0 ${isUser ? "items-end" : "items-start"}`}>
+                        <div
+                          className={`mb-2 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.24em] text-white/35 ${
+                            isUser ? "justify-end" : "justify-start"
+                          }`}
+                        >
+                          <span>{isUser ? "You" : "Patrick AI"}</span>
+                        </div>
+
+                        <div
+                          className={`rounded-[24px] px-4 py-3 text-[15px] leading-7 text-white/90 shadow-sm sm:px-5 sm:py-4 ${
+                            isUser
+                              ? "chat-user-bubble rounded-br-lg"
+                              : isError
+                                ? "rounded-bl-lg border border-red-400/30 bg-red-500/10 text-red-100"
+                                : "chat-assistant-bubble rounded-bl-lg"
+                          }`}
+                        >
+                          {message.text}
+                          {streamingId === message.id && (
+                            <span className="ml-1 inline-block h-4 w-0.5 align-text-bottom cursor-blink bg-sky-300" />
+                          )}
+                        </div>
+
+                        {message.meta && (
+                          <div
+                            className={`mt-2 flex flex-wrap gap-2 ${
+                              isUser ? "justify-end" : "justify-start"
+                            }`}
+                          >
+                            {renderMeta(message.meta)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+
+            {sending && !streamingId && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex justify-start"
+              >
+                <div className="flex items-end gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-xs font-semibold text-white shadow-lg shadow-sky-500/20">
+                    AI
+                  </div>
+                  <div className="chat-assistant-bubble rounded-[24px] rounded-bl-lg px-5 py-4">
+                    <div className="flex gap-1.5">
+                      {[0, 1, 2].map((dot) => (
+                        <motion.div
+                          key={dot}
+                          className="h-2 w-2 rounded-full bg-sky-300"
+                          animate={{ opacity: [0.28, 1, 0.28], y: [0, -2, 0] }}
+                          transition={{
+                            duration: 0.9,
+                            repeat: Infinity,
+                            delay: dot * 0.12,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 px-4 py-4 sm:px-6 sm:py-5">
+          <div className="chat-input-shell mx-auto max-w-4xl rounded-[28px] p-3 sm:p-4">
+            <div className="flex items-start gap-3">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={sending}
+                placeholder="Ask about Patrick's work, strengths, project history, or favorite stack..."
+                rows={1}
+                className="min-h-[52px] max-h-[180px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/35"
+                onInput={(event) => resizeTextarea(event.currentTarget, 180)}
+              />
+              <motion.button
+                onClick={() => {
+                  void handleSend();
+                }}
+                disabled={!input.trim() || sending}
+                whileHover={{ scale: input.trim() && !sending ? 1.02 : 1 }}
+                whileTap={{ scale: input.trim() && !sending ? 0.96 : 1 }}
+                className="inline-flex h-12 items-center gap-2 rounded-2xl bg-white px-4 text-sm font-medium text-slate-950 transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
+              >
+                <Send className="h-4 w-4" />
+                <span className="hidden sm:inline">Send</span>
+              </motion.button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-2">
+              <p className="text-xs text-white/40">{COMPOSER_HINT}</p>
+              <p className="text-xs text-white/40">
+                {sending
+                  ? "Patrick AI is drafting a reply..."
+                  : mode === "stream"
+                    ? "Streaming replies are on."
+                    : "Single-response mode is on."}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </PageWrapper>
