@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/reusable-components/NavBar";
 import FloatingChat from "@/reusable-components/FloatingChat";
+import FloatingMusicPlayer from "@/reusable-components/FloatingMusicPlayer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -62,6 +63,7 @@ export default function RootLayout({
           <Navbar />
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
+        <FloatingMusicPlayer />
         <FloatingChat />
       </body>
     </html>

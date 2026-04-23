@@ -28,6 +28,10 @@ import {
   uid,
 } from "@/reusable-components/chat/chatShared";
 
+type ChatOpenDetail = {
+  prompt?: string;
+};
+
 function renderMeta(meta?: string) {
   if (!meta) return null;
 
@@ -65,26 +69,52 @@ export default function FloatingChat() {
   }, [messages]);
 
   useEffect(() => {
-    if (open) {
-      setHasUnread(false);
-      const timer = window.setTimeout(() => inputRef.current?.focus(), 220);
-      return () => window.clearTimeout(timer);
-    }
+    if (!open) return;
+
+    setHasUnread(false);
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus();
+      if (inputRef.current) resizeTextarea(inputRef.current, 150);
+    }, 180);
+
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {
-    if (open && !sending) {
-      inputRef.current?.focus();
-    }
-  }, [open, sending]);
+    const handleExternalOpen = (incoming: Event) => {
+      const event = incoming as CustomEvent<ChatOpenDetail | undefined>;
+      const prompt = event.detail?.prompt?.trim();
+
+      setOpen(true);
+      if (prompt) {
+        setInput(prompt);
+        window.setTimeout(() => {
+          if (!inputRef.current) return;
+          inputRef.current.focus();
+          resizeTextarea(inputRef.current, 150);
+          inputRef.current.setSelectionRange(prompt.length, prompt.length);
+        }, 180);
+      }
+    };
+
+    window.addEventListener("patrick-chat:open", handleExternalOpen as EventListener);
+    return () => {
+      window.removeEventListener(
+        "patrick-chat:open",
+        handleExternalOpen as EventListener
+      );
+    };
+  }, []);
 
   const addMessage = useCallback(
     (role: Role, text: string, extra?: Partial<Message>) => {
       const message: Message = { id: uid(), role, text, ...extra };
       setMessages((prev) => [...prev, message]);
+
       if (role === "assistant" && !openRef.current) {
         setHasUnread(true);
       }
+
       return message.id;
     },
     []
@@ -156,7 +186,6 @@ export default function FloatingChat() {
         text: "Rate limit reached. Please wait a minute before sending another message.",
         supported: false,
       });
-      if (!openRef.current) setHasUnread(true);
       return;
     }
 
@@ -169,7 +198,7 @@ export default function FloatingChat() {
 
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error("The stream could not be read.");
+      throw new Error("The live response stream could not be read.");
     }
 
     const decoder = new TextDecoder();
@@ -189,6 +218,7 @@ export default function FloatingChat() {
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
+
           const payload = JSON.parse(line.slice(6));
 
           if (payload.token !== undefined) {
@@ -219,7 +249,6 @@ export default function FloatingChat() {
           transport: "Live stream",
         }),
       });
-      if (!openRef.current) setHasUnread(true);
     }
   }
 
@@ -274,10 +303,10 @@ export default function FloatingChat() {
       <AnimatePresence>
         {open && (
           <motion.div
-            className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-[2px]"
             onClick={() => setOpen(false)}
           />
         )}
@@ -286,14 +315,15 @@ export default function FloatingChat() {
       <AnimatePresence>
         {open && (
           <motion.div
-            key="floating-chat-panel"
-            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            key="floating-chat-modal"
+            initial={{ opacity: 0, y: 30, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 24, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 240, damping: 26 }}
-            className="fixed inset-0 z-50 flex flex-col chat-shell sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[640px] sm:w-[420px] sm:rounded-[30px]"
+            exit={{ opacity: 0, y: 28, scale: 0.96 }}
+            transition={{ type: "spring", stiffness: 260, damping: 26 }}
+            style={{ transformOrigin: "bottom right" }}
+            className="fixed bottom-20 right-3 z-50 flex h-[min(38rem,calc(100vh-7.25rem))] w-[min(26rem,calc(100vw-1.5rem))] flex-col rounded-[28px] chat-shell sm:bottom-24 sm:right-6 sm:h-[min(40rem,calc(100vh-8rem))] sm:w-[26rem]"
           >
-            <div className="flex items-start gap-3 border-b border-white/10 px-4 py-4 pt-[max(env(safe-area-inset-top),1rem)] sm:px-5 sm:py-5">
+            <div className="flex items-start gap-3 border-b border-white/10 px-4 py-4">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)] text-sm font-semibold text-white shadow-lg shadow-sky-500/20">
                 P
               </div>
@@ -302,7 +332,7 @@ export default function FloatingChat() {
                 <div className="mb-2 flex flex-wrap gap-2">
                   <span className="chat-status-pill">
                     <Sparkles className="h-3.5 w-3.5 text-sky-300" />
-                    Live assistant
+                    Popup assistant
                   </span>
                   <span className="chat-status-pill">
                     <Bot className="h-3.5 w-3.5 text-indigo-300" />
@@ -311,8 +341,8 @@ export default function FloatingChat() {
                 </div>
                 <p className="text-base font-semibold text-white">Patrick AI</p>
                 <p className="mt-1 text-sm leading-5 text-white/58">
-                  Ask about projects, product thinking, experience, or the tools Patrick
-                  likes building with.
+                  Ask about projects, experience, product thinking, or Patrick&apos;s
+                  favorite stack.
                 </p>
               </div>
 
@@ -353,7 +383,7 @@ export default function FloatingChat() {
                   transition={{ duration: 0.22, ease: "easeOut" }}
                   className="overflow-hidden border-b border-white/10"
                 >
-                  <div className="grid gap-3 px-4 py-4 sm:px-5">
+                  <div className="grid gap-3 px-4 py-4">
                     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                       <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
                         Context
@@ -413,7 +443,7 @@ export default function FloatingChat() {
 
             <div
               ref={chatRef}
-              className="chat-scroll-fade flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5"
+              className="chat-scroll-fade flex-1 overflow-y-auto px-4 py-4"
             >
               {showQuickPrompts && (
                 <div className="mb-5 flex flex-wrap gap-2">
@@ -534,8 +564,8 @@ export default function FloatingChat() {
               </div>
             </div>
 
-            <div className="border-t border-white/10 px-3 py-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-4 sm:py-4">
-              <div className="chat-input-shell rounded-[24px] p-2.5 sm:p-3">
+            <div className="border-t border-white/10 px-3 py-3">
+              <div className="chat-input-shell rounded-[24px] p-2.5">
                 <div className="flex items-start gap-2.5">
                   <textarea
                     ref={inputRef}
@@ -545,8 +575,8 @@ export default function FloatingChat() {
                     disabled={sending}
                     placeholder="Ask about Patrick's projects, strengths, or stack..."
                     rows={1}
-                    className="min-h-[48px] max-h-[140px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/35"
-                    onInput={(event) => resizeTextarea(event.currentTarget, 140)}
+                    className="min-h-[48px] max-h-[150px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/35"
+                    onInput={(event) => resizeTextarea(event.currentTarget, 150)}
                   />
                   <motion.button
                     onClick={() => {
@@ -585,7 +615,7 @@ export default function FloatingChat() {
             aria-label="Open Patrick AI chat"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.96 }}
-            className="chat-fab relative flex h-14 w-14 items-center justify-center rounded-full p-0 text-white sm:h-auto sm:w-auto sm:min-w-[18rem] sm:justify-start sm:gap-3 sm:px-3.5 sm:py-3"
+            className="chat-fab relative flex h-14 w-14 items-center justify-center rounded-full p-0 text-white sm:h-auto sm:w-auto sm:min-w-[17rem] sm:justify-start sm:gap-3 sm:px-3.5 sm:py-3"
           >
             <motion.span
               className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(44,195,255,0.18),transparent_70%)] sm:rounded-[999px]"
@@ -602,7 +632,7 @@ export default function FloatingChat() {
                 Patrick AI
               </span>
               <span className="block truncate text-sm font-medium text-white">
-                Ask about projects, experience, or tech stack
+                Open the popup assistant
               </span>
             </span>
 

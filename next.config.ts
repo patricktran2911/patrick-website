@@ -7,13 +7,13 @@ const nextConfig: NextConfig = {
   async headers() {
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "media-src 'self'",
       "font-src 'self'",
-      "frame-src https://challenges.cloudflare.com",
-      "connect-src 'self' https://api.emailjs.com https://challenges.cloudflare.com https://ai-dev.patrickcs-web.com",
+      "frame-src https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "connect-src 'self' https://api.emailjs.com https://challenges.cloudflare.com https://ai-dev.patrickcs-web.com https://www.youtube.com https://www.youtube-nocookie.com",
       "object-src 'none'",
       "base-uri 'self'",
     ].join("; ");

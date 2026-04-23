@@ -240,6 +240,69 @@ body {
   -webkit-backdrop-filter: blur(18px);
 }
 
+.music-shell {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(12, 18, 35, 0.94), rgba(5, 9, 18, 0.95)),
+    rgba(3, 7, 17, 0.92);
+  box-shadow:
+    0 24px 54px rgba(2, 6, 23, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.music-shell::before {
+  content: "";
+  position: absolute;
+  inset: -25% auto auto -18%;
+  width: 80%;
+  height: 80%;
+  background:
+    radial-gradient(circle, rgba(44, 195, 255, 0.2), transparent 62%);
+  pointer-events: none;
+}
+
+.music-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.music-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.82);
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.music-control:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.music-progress-track {
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.music-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--chat-accent-start), var(--chat-accent-end));
+  box-shadow: 0 0 22px rgba(44, 195, 255, 0.35);
+}
+
 @keyframes blink {
   50% {
     opacity: 0;
