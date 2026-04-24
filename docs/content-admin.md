@@ -57,6 +57,19 @@ The music widget now reads from a simple `songUrls` array inside the `music` sec
 
 This keeps the admin editing flow simple and avoids playlist-specific setup.
 
+YouTube URLs are also enriched automatically:
+
+- The music widget prefetches YouTube metadata.
+- Queue titles update from YouTube when metadata is available.
+
+## Resume Drive URL
+
+The resume section now uses a full Google Drive URL instead of a raw file ID.
+
+- Paste the public Google Drive file URL into `resume.driveUrl`.
+- The site derives the preview and download links from that URL.
+- The visual preview is rendered from the same Drive source, so there is no separate thumbnail field to maintain.
+
 ## Reusable editor design
 
 `src/reusable-components/admin/JsonFieldEditor.tsx` is recursive on purpose.

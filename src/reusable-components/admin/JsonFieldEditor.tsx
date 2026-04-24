@@ -49,8 +49,8 @@ function getFieldHint(path: string) {
     return "Tailwind utility class used behind the project logo.";
   }
 
-  if (path.endsWith(".resumeFileId")) {
-    return "Google Drive file ID used for the public resume links.";
+  if (path.endsWith(".driveUrl")) {
+    return "Paste the public Google Drive URL for the resume file.";
   }
 
   if (path.endsWith(".favicon")) {

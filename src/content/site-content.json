@@ -281,8 +281,7 @@
     },
     "headerTitle": "My Resume",
     "intro": "Tap the preview to view in full screen, or download below.",
-    "resumeFileId": "1wgqk3KyJd1mj3O02Swn9Hyf1jG6_iUYm",
-    "thumbnail": "/Assets/images/resume-thumbnail.png",
+    "driveUrl": "https://drive.google.com/file/d/1wgqk3KyJd1mj3O02Swn9Hyf1jG6_iUYm/view",
     "highlightsTitle": "Highlights",
     "highlights": [
       "Full-stack development with React, Next.js, FastAPI",

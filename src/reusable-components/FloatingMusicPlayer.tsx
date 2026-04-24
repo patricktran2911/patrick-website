@@ -397,6 +397,64 @@ export default function FloatingMusicPlayer({
   }, [playTrackAtIndex]);
 
   useEffect(() => {
+    const youtubeUrls = tracks
+      .filter((track) => track.kind === "youtube")
+      .map((track) => track.url);
+
+    if (youtubeUrls.length === 0) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/music/metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ songUrls: youtubeUrls }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          titles?: Record<string, string | null>;
+        };
+
+        if (!payload.titles) {
+          return;
+        }
+
+        const nextTitles = Object.fromEntries(
+          Object.entries(payload.titles).filter((entry): entry is [string, string] =>
+            typeof entry[1] === "string" && entry[1].trim().length > 0
+          )
+        );
+
+        if (Object.keys(nextTitles).length === 0) {
+          return;
+        }
+
+        setTrackTitles((previous) => ({ ...previous, ...nextTitles }));
+
+        const currentTrack = tracks[currentIndexRef.current];
+        if (currentTrack && nextTitles[currentTrack.url]) {
+          setCurrentTitle(nextTitles[currentTrack.url]);
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.error("Unable to prefetch YouTube metadata.", error);
+        }
+      }
+    })();
+
+    return () => controller.abort();
+  }, [tracks]);
+
+  useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
 

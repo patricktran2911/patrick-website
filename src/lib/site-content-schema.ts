@@ -106,8 +106,7 @@ export interface ResumeContent {
   metadata: MetadataBlock;
   headerTitle: string;
   intro: string;
-  resumeFileId: string;
-  thumbnail: string;
+  driveUrl: string;
   highlightsTitle: string;
   highlights: string[];
   downloadLabel: string;
