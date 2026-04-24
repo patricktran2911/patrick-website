@@ -47,6 +47,16 @@ Admin access uses a signed cookie session.
 
 The password is intentionally configurable through environment variables so production can move away from the fallback without code changes.
 
+## Music URLs
+
+The music widget now reads from a simple `songUrls` array inside the `music` section.
+
+- Each item should be a full URL.
+- YouTube watch links are supported.
+- Direct audio file URLs are also supported.
+
+This keeps the admin editing flow simple and avoids playlist-specific setup.
+
 ## Reusable editor design
 
 `src/reusable-components/admin/JsonFieldEditor.tsx` is recursive on purpose.

@@ -151,23 +151,24 @@ export interface ChatContent {
 }
 
 export interface MusicContent {
-  playlistId: string;
+  songUrls: string[];
   widgetOpenLabel: string;
   panelTitle: string;
   defaultTrackTitle: string;
   defaultStatus: string;
   openPrompt: string;
   loadingLabel: string;
-  playlistTitle: string;
-  playlistHeading: string;
-  playlistDescription: string;
+  queueTitle: string;
+  queueHeading: string;
+  queueDescription: string;
   currentBadge: string;
   playLabel: string;
   pauseLabel: string;
   previousLabel: string;
   nextLabel: string;
   volumeLabel: string;
-  showPlaylistLabel: string;
+  emptyStateLabel: string;
+  showQueueLabel: string;
   showPlayerLabel: string;
   minimizeLabel: string;
 }
@@ -234,6 +235,6 @@ export const SITE_CONTENT_SECTION_ORDER: Array<{
   {
     key: "music",
     label: "Music",
-    description: "Floating music player labels and playlist configuration.",
+    description: "Floating music player labels and song URL configuration.",
   },
 ];

@@ -57,6 +57,10 @@ function getFieldHint(path: string) {
     return "Public path to the favicon asset.";
   }
 
+  if (/^music\.songUrls\[\d+\]$/i.test(path)) {
+    return "Paste a YouTube song URL or a direct audio file URL for this track.";
+  }
+
   return null;
 }
 

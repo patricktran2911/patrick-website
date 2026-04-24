@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -18,29 +18,18 @@ import FloatingWidgetFrame, {
   FLOATING_WIDGET_FRAME_TRANSITION,
 } from "@/reusable-components/floating/FloatingWidgetFrame";
 import type { MusicContent } from "@/lib/site-content-schema";
+import { parseMusicTrackUrls, type MusicTrack } from "@/lib/music-tracks";
 
 const PLAYER_CONTAINER_ID = "patrick-youtube-player";
 const DEFAULT_VOLUME = 72;
 
-type YTPlayerPlaylistConfig = {
-  list: string;
-  listType: "playlist";
-  index?: number;
-  startSeconds?: number;
-};
-
 type YTPlayerInstance = {
-  cuePlaylist: (playlist: YTPlayerPlaylistConfig) => void;
-  loadPlaylist: (playlist: YTPlayerPlaylistConfig) => void;
-  playVideoAt: (index: number) => void;
+  cueVideoById: (videoId: string) => void;
+  loadVideoById: (videoId: string) => void;
   playVideo: () => void;
   pauseVideo: () => void;
-  nextVideo: () => void;
-  previousVideo: () => void;
   setVolume: (volume: number) => void;
   getVolume: () => number;
-  getPlaylist: () => string[];
-  getPlaylistIndex: () => number;
   getVideoData: () => { title?: string };
   getCurrentTime: () => number;
   getDuration: () => number;
@@ -68,7 +57,6 @@ type YTNamespace = {
     }
   ) => YTPlayerInstance;
   PlayerState: {
-    UNSTARTED: number;
     ENDED: number;
     PLAYING: number;
     PAUSED: number;
@@ -148,252 +136,448 @@ export default function FloatingMusicPlayer({
   content,
 }: FloatingMusicPlayerProps) {
   const pathname = usePathname();
+  const tracks = useMemo(() => parseMusicTrackUrls(content.songUrls), [content.songUrls]);
+
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState<"player" | "playlist">("player");
-  const [playerReady, setPlayerReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [currentTitle, setCurrentTitle] = useState(content.defaultTrackTitle);
-  const [statusText, setStatusText] = useState(content.openPrompt);
+  const [statusText, setStatusText] = useState(
+    tracks.length > 0 ? content.openPrompt : content.emptyStateLabel
+  );
   const [elapsed, setElapsed] = useState("0:00");
   const [duration, setDuration] = useState("0:00");
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(DEFAULT_VOLUME);
-  const [playlistIds, setPlaylistIds] = useState<string[]>([]);
-  const [playlistIndex, setPlaylistIndex] = useState(0);
-  const [playlistTitles, setPlaylistTitles] = useState<Record<string, string>>({});
+  const [trackTitles, setTrackTitles] = useState<Record<string, string>>({});
 
-  const playerRef = useRef<YTPlayerInstance | null>(null);
-  const shouldAutoplayRef = useRef(false);
+  const youtubePlayerRef = useRef<YTPlayerInstance | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeKindRef = useRef<MusicTrack["kind"] | null>(null);
+  const currentIndexRef = useRef(0);
+  const playTrackAtIndexRef = useRef<(index: number, autoplay: boolean) => Promise<void>>(
+    async () => {}
+  );
+
+  const emptyStatus = tracks.length > 0 ? content.openPrompt : content.emptyStateLabel;
+
+  const getTrackLabel = useCallback(
+    (track: MusicTrack, index: number) =>
+      trackTitles[track.url] ?? track.label ?? `Track ${String(index + 1).padStart(2, "0")}`,
+    [trackTitles]
+  );
+
+  const resetPlaybackState = useCallback(
+    (nextTitle = content.defaultTrackTitle, nextStatus = emptyStatus) => {
+      setCurrentTitle(nextTitle);
+      setStatusText(nextStatus);
+      setElapsed("0:00");
+      setDuration("0:00");
+      setProgress(0);
+      setLoading(false);
+      setIsPlaying(false);
+    },
+    [content.defaultTrackTitle, emptyStatus]
+  );
+
+  const ensureAudioElement = useCallback(() => {
+    if (!audioRef.current) {
+      const audio = new Audio();
+      audio.preload = "metadata";
+      audioRef.current = audio;
+    }
+
+    return audioRef.current;
+  }, []);
 
   const updateSnapshot = useCallback(() => {
-    const player = playerRef.current;
-    if (!player) return;
-
-    const title = player.getVideoData().title?.trim();
-    const currentTime = player.getCurrentTime();
-    const totalTime = player.getDuration();
-    const playlist = player.getPlaylist();
-    const nextIndex = player.getPlaylistIndex();
-
-    if (title) setCurrentTitle(title);
-    if (playlist.length > 0) {
-      setPlaylistIds((prev) =>
-        prev.length === playlist.length && prev.every((item, index) => item === playlist[index])
-          ? prev
-          : playlist
-      );
-    }
-    if (Number.isFinite(nextIndex) && nextIndex >= 0) {
-      setPlaylistIndex(nextIndex);
-    }
-    if (title && playlist[nextIndex]) {
-      setPlaylistTitles((prev) =>
-        prev[playlist[nextIndex]] === title
-          ? prev
-          : { ...prev, [playlist[nextIndex]]: title }
-      );
+    const track = tracks[currentIndexRef.current];
+    if (!track) {
+      resetPlaybackState();
+      return;
     }
 
-    setElapsed(formatTime(currentTime));
-    setDuration(formatTime(totalTime));
-    setProgress(totalTime > 0 ? Math.min((currentTime / totalTime) * 100, 100) : 0);
-  }, []);
+    setCurrentTitle(getTrackLabel(track, currentIndexRef.current));
 
-  const applyVolume = useCallback((nextVolume: number) => {
-    const player = playerRef.current;
-    if (!player) return;
-    player.setVolume(nextVolume);
-  }, []);
+    if (activeKindRef.current === "youtube" && youtubePlayerRef.current) {
+      const player = youtubePlayerRef.current;
+      const title = player.getVideoData().title?.trim();
 
-  const ensurePlayer = useCallback(
-    async (autoplay = false) => {
-      shouldAutoplayRef.current = autoplay;
-
-      if (playerRef.current) {
-        if (autoplay) playerRef.current.playVideo();
-        return playerRef.current;
+      if (title) {
+        setTrackTitles((previous) =>
+          previous[track.url] === title ? previous : { ...previous, [track.url]: title }
+        );
+        setCurrentTitle(title);
       }
 
-      setLoading(true);
-      setStatusText(content.loadingLabel);
+      const currentTime = player.getCurrentTime();
+      const totalTime = player.getDuration();
+      setElapsed(formatTime(currentTime));
+      setDuration(formatTime(totalTime));
+      setProgress(totalTime > 0 ? Math.min((currentTime / totalTime) * 100, 100) : 0);
+      return;
+    }
 
-      const YT = await loadYouTubeIframeApi();
-      const existingPlayer = playerRef.current as YTPlayerInstance | null;
+    if (activeKindRef.current === "audio" && audioRef.current) {
+      const audio = audioRef.current;
+      const currentTime = audio.currentTime;
+      const totalTime = audio.duration;
+      setElapsed(formatTime(currentTime));
+      setDuration(formatTime(totalTime));
+      setProgress(totalTime > 0 ? Math.min((currentTime / totalTime) * 100, 100) : 0);
+      return;
+    }
 
-      if (existingPlayer) {
-        setLoading(false);
-        if (autoplay) existingPlayer.playVideo();
-        return existingPlayer;
-      }
+    setElapsed("0:00");
+    setDuration("0:00");
+    setProgress(0);
+  }, [getTrackLabel, resetPlaybackState, tracks]);
 
-      return new Promise<YTPlayerInstance>((resolve, reject) => {
-        const playlistConfig: YTPlayerPlaylistConfig = {
-          list: content.playlistId,
-          listType: "playlist",
-          index: 0,
-        };
+  const ensureYouTubePlayer = useCallback(async () => {
+    if (youtubePlayerRef.current) {
+      return youtubePlayerRef.current;
+    }
 
-        playerRef.current = new YT.Player(PLAYER_CONTAINER_ID, {
-          width: "1",
-          height: "1",
-          host: "https://www.youtube-nocookie.com",
-          playerVars: {
-            autoplay: 0,
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            iv_load_policy: 3,
-            modestbranding: 1,
-            playsinline: 1,
-            rel: 0,
-            origin: window.location.origin,
+    const YT = await loadYouTubeIframeApi();
+
+    if (youtubePlayerRef.current) {
+      return youtubePlayerRef.current;
+    }
+
+    return new Promise<YTPlayerInstance>((resolve, reject) => {
+      youtubePlayerRef.current = new YT.Player(PLAYER_CONTAINER_ID, {
+        width: "1",
+        height: "1",
+        host: "https://www.youtube-nocookie.com",
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          origin: window.location.origin,
+        },
+        events: {
+          onReady: (event) => {
+            event.target.setVolume(volume);
+            setVolume(event.target.getVolume());
+            resolve(event.target);
           },
-          events: {
-            onReady: (event) => {
-              setPlayerReady(true);
+          onStateChange: (event) => {
+            if (activeKindRef.current !== "youtube") {
+              return;
+            }
+
+            const playerState = YT.PlayerState;
+
+            if (event.data === playerState.PLAYING) {
               setLoading(false);
-              event.target.setVolume(volume);
-              setVolume(event.target.getVolume());
-              setStatusText(
-                shouldAutoplayRef.current ? content.playLabel : content.defaultStatus
-              );
-
-              if (shouldAutoplayRef.current) {
-                event.target.loadPlaylist(playlistConfig);
-              } else {
-                event.target.cuePlaylist(playlistConfig);
-              }
-
-              window.setTimeout(updateSnapshot, 300);
-              resolve(event.target);
-            },
-            onStateChange: (event) => {
-              const playerState = YT.PlayerState;
-
-              if (event.data === playerState.PLAYING) {
-                setIsPlaying(true);
-                setStatusText(content.playLabel);
-              } else if (event.data === playerState.PAUSED) {
-                setIsPlaying(false);
-                setStatusText(content.pauseLabel);
-              } else if (event.data === playerState.BUFFERING) {
-                setStatusText(content.loadingLabel);
-              } else if (event.data === playerState.CUED) {
-                setStatusText(content.defaultStatus);
-              } else if (event.data === playerState.ENDED) {
-                setIsPlaying(false);
-                setStatusText("Track ended");
-              }
-
-              window.setTimeout(updateSnapshot, 250);
-            },
-            onError: () => {
+              setIsPlaying(true);
+              setStatusText(content.playLabel);
+            } else if (event.data === playerState.PAUSED) {
               setLoading(false);
               setIsPlaying(false);
-              setStatusText("Playback could not start");
-              reject(new Error("Unable to start YouTube playback."));
-            },
+              setStatusText(content.pauseLabel);
+            } else if (event.data === playerState.BUFFERING) {
+              setLoading(true);
+              setStatusText(content.loadingLabel);
+            } else if (event.data === playerState.CUED) {
+              setLoading(false);
+              setIsPlaying(false);
+              setStatusText(content.defaultStatus);
+            } else if (event.data === playerState.ENDED) {
+              setLoading(false);
+              setIsPlaying(false);
+              void playTrackAtIndexRef.current(currentIndexRef.current + 1, true);
+            }
+
+            window.setTimeout(updateSnapshot, 180);
           },
-        });
+          onError: () => {
+            setLoading(false);
+            setIsPlaying(false);
+            setStatusText("Playback could not start");
+            reject(new Error("Unable to start YouTube playback."));
+          },
+        },
       });
+    });
+  }, [
+    content.defaultStatus,
+    content.loadingLabel,
+    content.pauseLabel,
+    content.playLabel,
+    updateSnapshot,
+    volume,
+  ]);
+
+  const playTrackAtIndex = useCallback(
+    async (index: number, autoplay: boolean) => {
+      if (tracks.length === 0) {
+        resetPlaybackState(content.defaultTrackTitle, content.emptyStateLabel);
+        return;
+      }
+
+      const nextIndex = ((index % tracks.length) + tracks.length) % tracks.length;
+      const track = tracks[nextIndex];
+
+      currentIndexRef.current = nextIndex;
+      setCurrentIndex(nextIndex);
+      setCurrentTitle(getTrackLabel(track, nextIndex));
+      setStatusText(content.loadingLabel);
+      setElapsed("0:00");
+      setDuration("0:00");
+      setProgress(0);
+      setLoading(true);
+      setIsPlaying(false);
+
+      if (track.kind === "youtube") {
+        activeKindRef.current = "youtube";
+        audioRef.current?.pause();
+
+        try {
+          const player = await ensureYouTubePlayer();
+          player.setVolume(volume);
+
+          if (autoplay) {
+            player.loadVideoById(track.videoId);
+          } else {
+            player.cueVideoById(track.videoId);
+          }
+        } catch (error) {
+          setLoading(false);
+          setStatusText((error as Error).message);
+        }
+
+        return;
+      }
+
+      activeKindRef.current = "audio";
+      youtubePlayerRef.current?.pauseVideo();
+
+      const audio = ensureAudioElement();
+      audio.volume = volume / 100;
+      audio.src = track.url;
+      audio.load();
+
+      if (!autoplay) {
+        setLoading(false);
+        setStatusText(content.defaultStatus);
+        return;
+      }
+
+      try {
+        await audio.play();
+      } catch (error) {
+        setLoading(false);
+        setStatusText((error as Error).message);
+      }
     },
     [
       content.defaultStatus,
+      content.defaultTrackTitle,
+      content.emptyStateLabel,
       content.loadingLabel,
-      content.pauseLabel,
-      content.playLabel,
-      content.playlistId,
-      updateSnapshot,
+      ensureAudioElement,
+      ensureYouTubePlayer,
+      getTrackLabel,
+      resetPlaybackState,
+      tracks,
       volume,
     ]
   );
 
   useEffect(() => {
-    if (!playerReady) return;
+    playTrackAtIndexRef.current = playTrackAtIndex;
+  }, [playTrackAtIndex]);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  useEffect(() => {
+    const audio = ensureAudioElement();
+
+    const handlePlay = () => {
+      if (activeKindRef.current !== "audio") return;
+      setLoading(false);
+      setIsPlaying(true);
+      setStatusText(content.playLabel);
+      updateSnapshot();
+    };
+
+    const handlePause = () => {
+      if (activeKindRef.current !== "audio" || audio.ended) return;
+      setLoading(false);
+      setIsPlaying(false);
+      setStatusText(content.pauseLabel);
+      updateSnapshot();
+    };
+
+    const handleWaiting = () => {
+      if (activeKindRef.current !== "audio") return;
+      setLoading(true);
+      setStatusText(content.loadingLabel);
+    };
+
+    const handleCanPlay = () => {
+      if (activeKindRef.current !== "audio") return;
+      setLoading(false);
+      setStatusText(audio.paused ? content.defaultStatus : content.playLabel);
+      updateSnapshot();
+    };
+
+    const handleTimeUpdate = () => {
+      if (activeKindRef.current !== "audio") return;
+      updateSnapshot();
+    };
+
+    const handleEnded = () => {
+      if (activeKindRef.current !== "audio") return;
+      setLoading(false);
+      setIsPlaying(false);
+      void playTrackAtIndexRef.current(currentIndexRef.current + 1, true);
+    };
+
+    const handleError = () => {
+      if (activeKindRef.current !== "audio") return;
+      setLoading(false);
+      setIsPlaying(false);
+      setStatusText("Playback could not start");
+    };
+
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("waiting", handleWaiting);
+    audio.addEventListener("canplay", handleCanPlay);
+    audio.addEventListener("loadedmetadata", handleCanPlay);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("error", handleError);
+
+    return () => {
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("waiting", handleWaiting);
+      audio.removeEventListener("canplay", handleCanPlay);
+      audio.removeEventListener("loadedmetadata", handleCanPlay);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
+    };
+  }, [
+    content.defaultStatus,
+    content.loadingLabel,
+    content.pauseLabel,
+    content.playLabel,
+    ensureAudioElement,
+    updateSnapshot,
+  ]);
+
+  useEffect(() => {
+    audioRef.current?.pause();
+    youtubePlayerRef.current?.pauseVideo();
+    activeKindRef.current = null;
+
+    if (tracks.length === 0) {
+      currentIndexRef.current = 0;
+      setCurrentIndex(0);
+      resetPlaybackState(content.defaultTrackTitle, content.emptyStateLabel);
+      return;
+    }
+
+    const nextIndex = Math.min(currentIndexRef.current, tracks.length - 1);
+    currentIndexRef.current = nextIndex;
+    setCurrentIndex(nextIndex);
+    resetPlaybackState(getTrackLabel(tracks[nextIndex], nextIndex), content.openPrompt);
+  }, [
+    content.defaultTrackTitle,
+    content.emptyStateLabel,
+    content.openPrompt,
+    getTrackLabel,
+    resetPlaybackState,
+    tracks,
+  ]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume / 100;
+    }
+
+    youtubePlayerRef.current?.setVolume(volume);
+  }, [volume]);
+
+  useEffect(() => {
+    if (!expanded) return;
 
     const interval = window.setInterval(updateSnapshot, 1000);
     return () => window.clearInterval(interval);
-  }, [playerReady, updateSnapshot]);
-
-  useEffect(() => {
-    applyVolume(volume);
-  }, [applyVolume, volume]);
+  }, [expanded, updateSnapshot]);
 
   useEffect(() => {
     return () => {
-      playerRef.current?.destroy();
-      playerRef.current = null;
+      audioRef.current?.pause();
+      audioRef.current = null;
+      youtubePlayerRef.current?.destroy();
+      youtubePlayerRef.current = null;
     };
   }, []);
 
-  async function handleTogglePlay() {
-    try {
-      if (!playerRef.current) {
-        const player = await ensurePlayer(false);
-        player.playVideo();
-        return;
-      }
+  const handleTogglePlay = async () => {
+    if (tracks.length === 0) {
+      setStatusText(content.emptyStateLabel);
+      return;
+    }
 
-      if (isPlaying) {
-        playerRef.current.pauseVideo();
+    if (activeKindRef.current === "audio" && audioRef.current) {
+      if (audioRef.current.paused) {
+        try {
+          await audioRef.current.play();
+        } catch (error) {
+          setStatusText((error as Error).message);
+        }
       } else {
-        playerRef.current.playVideo();
+        audioRef.current.pause();
       }
-    } catch (error) {
-      setStatusText((error as Error).message);
+      return;
     }
-  }
 
-  async function handleNext() {
-    try {
-      const player = await ensurePlayer(false);
-      player.nextVideo();
-      player.playVideo();
-      setView("player");
-      setStatusText(content.nextLabel);
-    } catch (error) {
-      setStatusText((error as Error).message);
+    if (activeKindRef.current === "youtube" && youtubePlayerRef.current) {
+      if (isPlaying) {
+        youtubePlayerRef.current.pauseVideo();
+      } else {
+        youtubePlayerRef.current.playVideo();
+      }
+      return;
     }
-  }
 
-  async function handlePrevious() {
-    try {
-      const player = await ensurePlayer(false);
-      player.previousVideo();
-      player.playVideo();
-      setView("player");
-      setStatusText(content.previousLabel);
-    } catch (error) {
-      setStatusText((error as Error).message);
-    }
-  }
+    await playTrackAtIndex(currentIndexRef.current, true);
+  };
 
-  function handleExpand() {
+  const handleNext = async () => {
+    await playTrackAtIndex(currentIndexRef.current + 1, true);
+    setView("player");
+  };
+
+  const handlePrevious = async () => {
+    await playTrackAtIndex(currentIndexRef.current - 1, true);
+    setView("player");
+  };
+
+  const handleExpand = () => {
     setExpanded(true);
     setView("player");
-    if (!playerRef.current && !loading) {
-      void ensurePlayer(false);
-    }
-  }
+  };
 
-  async function handleSelectTrack(index: number) {
-    try {
-      const player = await ensurePlayer(false);
-      player.playVideoAt(index);
-      setPlaylistIndex(index);
-      setView("player");
-      setStatusText(`${content.playLabel} ${String(index + 1).padStart(2, "0")}...`);
-    } catch (error) {
-      setStatusText((error as Error).message);
-    }
-  }
-
-  function getTrackLabel(videoId: string, index: number) {
-    if (playlistTitles[videoId]) return playlistTitles[videoId];
-    if (index === playlistIndex && currentTitle) return currentTitle;
-    return `Track ${String(index + 1).padStart(2, "0")}`;
-  }
+  const handleSelectTrack = async (index: number) => {
+    await playTrackAtIndex(index, true);
+    setView("player");
+  };
 
   if (pathname?.startsWith("/admin")) {
     return null;
@@ -446,11 +630,11 @@ export default function FloatingMusicPlayer({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() =>
-                    setView((prev) => (prev === "player" ? "playlist" : "player"))
+                    setView((previous) => (previous === "player" ? "playlist" : "player"))
                   }
                   className="music-control h-9 w-9"
                   aria-label={
-                    view === "player" ? content.showPlaylistLabel : content.showPlayerLabel
+                    view === "player" ? content.showQueueLabel : content.showPlayerLabel
                   }
                 >
                   {view === "player" ? (
@@ -482,7 +666,7 @@ export default function FloatingMusicPlayer({
                   <div className="mb-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-3">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <p className="truncate text-sm text-white/70">
-                        {content.playlistTitle}
+                        {content.queueTitle}
                       </p>
                       <span className="text-[11px] text-white/42">
                         {loading ? content.loadingLabel : statusText}
@@ -552,7 +736,7 @@ export default function FloatingMusicPlayer({
                       value={volume}
                       onChange={(event) => setVolume(Number(event.target.value))}
                       className="music-slider h-2 w-full cursor-pointer appearance-none rounded-full bg-transparent"
-                      aria-label="Volume"
+                      aria-label={content.volumeLabel}
                     />
                   </div>
                 </div>
@@ -560,26 +744,20 @@ export default function FloatingMusicPlayer({
                 <div className="flex h-full w-1/2 flex-col pl-2">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-white">
-                        {content.playlistHeading}
-                      </p>
-                      <p className="text-[11px] text-white/42">
-                        {content.playlistDescription}
-                      </p>
+                      <p className="text-sm font-medium text-white">{content.queueHeading}</p>
+                      <p className="text-[11px] text-white/42">{content.queueDescription}</p>
                     </div>
-                    <span className="text-[11px] text-white/42">
-                      {playlistIds.length} tracks
-                    </span>
+                    <span className="text-[11px] text-white/42">{tracks.length} tracks</span>
                   </div>
 
                   <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-                    {playlistIds.length > 0 ? (
-                      playlistIds.map((videoId, index) => {
-                        const active = index === playlistIndex;
+                    {tracks.length > 0 ? (
+                      tracks.map((track, index) => {
+                        const active = index === currentIndex;
 
                         return (
                           <button
-                            key={videoId}
+                            key={`${track.kind}-${track.url}`}
                             onClick={() => {
                               void handleSelectTrack(index);
                             }}
@@ -600,16 +778,15 @@ export default function FloatingMusicPlayer({
                               )}
                             </div>
                             <p className="line-clamp-2 text-sm font-medium text-white">
-                              {getTrackLabel(videoId, index)}
+                              {getTrackLabel(track, index)}
                             </p>
+                            <p className="mt-1 line-clamp-1 text-xs text-white/40">{track.url}</p>
                           </button>
                         );
                       })
                     ) : (
                       <div className="rounded-2xl border border-dashed border-white/10 px-3 py-6 text-center text-sm text-white/48">
-                        {loading
-                          ? content.loadingLabel
-                          : content.openPrompt}
+                        {content.emptyStateLabel}
                       </div>
                     )}
                   </div>
