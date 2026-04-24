@@ -345,7 +345,22 @@
     ]
   },
   "music": {
-    "songUrls": [],
+    "songUrls": [
+      "https://www.youtube.com/watch?v=FM7MFYoylVs",
+      "https://www.youtube.com/watch?v=3q2IXr6fjh0",
+      "https://www.youtube.com/watch?v=amOSaNX7KJg",
+      "https://www.youtube.com/watch?v=WEFJnYMz0Ec",
+      "https://www.youtube.com/watch?v=kknKs7cAcO8",
+      "https://www.youtube.com/watch?v=-TXtyYZIiWc",
+      "https://www.youtube.com/watch?v=r1Fx0tqK5Z4",
+      "https://www.youtube.com/watch?v=npOd6VKV4iY",
+      "https://www.youtube.com/watch?v=ctlSbx6R76w",
+      "https://www.youtube.com/watch?v=tPMFAbhlDbU",
+      "https://www.youtube.com/watch?v=RI-HOQ27QEM",
+      "https://www.youtube.com/watch?v=DlFXDl_ROAM",
+      "https://www.youtube.com/watch?v=Il-an3K9pjg",
+      "https://www.youtube.com/watch?v=MMfpp0-lnw4"
+    ],
     "widgetOpenLabel": "Open music player",
     "panelTitle": "Music Player",
     "defaultTrackTitle": "Song queue",
