@@ -1,11 +1,12 @@
-import { Metadata } from "next";
+import { getSiteContent, toPageMetadata } from "@/lib/site-content";
 import Contact from "./render";
 
-export const metadata: Metadata = {
-  title: "Contact | Patrick Tran",
-  description: "Get in touch with Patrick Tran for collaboration or questions.",
-};
+export async function generateMetadata() {
+  const { contact } = await getSiteContent();
+  return toPageMetadata(contact.metadata);
+}
 
-export default function Page() {
-  return <Contact />;
+export default async function ContactPage() {
+  const { contact } = await getSiteContent();
+  return <Contact content={contact} />;
 }

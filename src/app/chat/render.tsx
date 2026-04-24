@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { MessageCircle, Sparkles } from "lucide-react";
 import PageWrapper from "@/reusable-components/PageWrapper";
-import { QUICK_PROMPTS } from "@/reusable-components/chat/chatShared";
+import type { ChatContent } from "@/lib/site-content-schema";
 
 function openFloatingChat(prompt?: string) {
   window.dispatchEvent(
@@ -14,7 +14,11 @@ function openFloatingChat(prompt?: string) {
   );
 }
 
-export default function Chat() {
+interface ChatRenderProps {
+  content: ChatContent;
+}
+
+export default function Chat({ content }: ChatRenderProps) {
   useEffect(() => {
     openFloatingChat();
   }, []);
@@ -37,7 +41,7 @@ export default function Chat() {
           transition={{ duration: 0.55, delay: 0.08 }}
           className="text-4xl font-semibold tracking-tight text-white sm:text-5xl"
         >
-          Patrick AI now opens as a floating popup
+          {content.pageTitle}
         </motion.h1>
 
         <motion.p
@@ -46,9 +50,7 @@ export default function Chat() {
           transition={{ duration: 0.55, delay: 0.18 }}
           className="mt-4 max-w-2xl text-base leading-7 text-white/68 sm:text-lg"
         >
-          The assistant lives in the bottom-right corner so visitors can chat from
-          anywhere without leaving the page. Use the prompt starters below or tap the
-          floating button to jump straight in.
+          {content.pageBody}
         </motion.p>
 
         <motion.div
@@ -57,7 +59,7 @@ export default function Chat() {
           transition={{ duration: 0.55, delay: 0.28 }}
           className="mt-10 flex flex-wrap justify-center gap-3"
         >
-          {QUICK_PROMPTS.map((prompt) => (
+          {content.quickPrompts.map((prompt) => (
             <button
               key={prompt.label}
               onClick={() => openFloatingChat(prompt.prompt)}
@@ -77,7 +79,7 @@ export default function Chat() {
           className="mt-10 inline-flex items-center gap-3 rounded-full bg-white px-6 py-3 text-sm font-medium text-slate-950 shadow-2xl shadow-sky-500/10 transition hover:-translate-y-0.5"
         >
           <MessageCircle className="h-4 w-4" />
-          Open Patrick AI
+          {content.openButtonLabel}
         </motion.button>
       </section>
     </PageWrapper>

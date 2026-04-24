@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/reusable-components/NavBar";
 import FloatingChat from "@/reusable-components/FloatingChat";
 import FloatingMusicPlayer from "@/reusable-components/FloatingMusicPlayer";
+import { getSiteContent } from "@/lib/site-content";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,56 +16,53 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Patrick Tran — Software Engineer",
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-  },
-  description:
-    "Portfolio of Patrick Tran — Full-Stack, Mobile, and AI Engineer.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { global } = await getSiteContent();
 
-export default function RootLayout({
+  return {
+    title: global.siteTitle,
+    description: global.siteDescription,
+    icons: {
+      icon: global.favicon,
+      shortcut: global.favicon,
+    },
+  };
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const content = await getSiteContent();
+  const { global } = content;
+
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased relative max-h-screen max-w-dvw`}
+        className={`${geistSans.variable} ${geistMono.variable} relative max-h-screen max-w-dvw antialiased`}
       >
-        {/* Background video */}
         <video
-          className="fixed inset-0 -z-10 w-full h-full object-cover"
+          className="fixed inset-0 -z-10 h-full w-full object-cover"
           autoPlay
           loop
           muted
           playsInline
           preload="none"
-          poster="/Assets/images/background-thumbnail.png"
+          poster={global.backgroundVideo.poster}
         >
-          <source
-            src="/Assets/videos/bg-video1.webm"
-            type="video/webm; codecs=vp9"
-          />
-          <source
-            src="/Assets/videos/bg-video1.mp4"
-            type="video/mp4; codecs=avc1.4D401E"
-          />
+          <source src={global.backgroundVideo.webm} type="video/webm; codecs=vp9" />
+          <source src={global.backgroundVideo.mp4} type="video/mp4; codecs=avc1.4D401E" />
         </video>
 
-        {/* Dark overlay */}
         <div className="fixed inset-0 -z-1 bg-black/70" />
 
-        {/* Main layout */}
-        <div className="flex flex-col h-screen w-full z-20">
-          <Navbar />
+        <div className="z-20 flex h-screen w-full flex-col">
+          <Navbar brandName={global.brandName} routes={global.navigation} />
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
-        <FloatingMusicPlayer />
-        <FloatingChat />
+        <FloatingMusicPlayer content={content.music} />
+        <FloatingChat content={content.chat} />
       </body>
     </html>
   );

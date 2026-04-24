@@ -1,12 +1,12 @@
-import { Metadata } from "next";
+import { getSiteContent, toPageMetadata } from "@/lib/site-content";
 import About from "./render";
 
-export const metadata: Metadata = {
-  title: "About | Patrick Tran",
-  description:
-    "Learn about Patrick Tran's journey as a Software Engineer in web, mobile, and AI.",
-};
+export async function generateMetadata() {
+  const { about } = await getSiteContent();
+  return toPageMetadata(about.metadata);
+}
 
-export default function Page() {
-  return <About />;
+export default async function AboutPage() {
+  const { about } = await getSiteContent();
+  return <About content={about} />;
 }

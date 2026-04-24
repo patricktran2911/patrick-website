@@ -1,12 +1,12 @@
-import { Metadata } from "next";
+import { getSiteContent, toPageMetadata } from "@/lib/site-content";
 import Chat from "./render";
 
-export const metadata: Metadata = {
-  title: "AI Chat | Patrick Tran",
-  description:
-    "Chat with Patrick's personal AI assistant.",
-};
+export async function generateMetadata() {
+  const { chat } = await getSiteContent();
+  return toPageMetadata(chat.metadata);
+}
 
-export default function Page() {
-  return <Chat />;
+export default async function ChatPage() {
+  const { chat } = await getSiteContent();
+  return <Chat content={chat} />;
 }

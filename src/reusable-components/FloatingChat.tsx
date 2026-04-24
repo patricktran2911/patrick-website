@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronDown,
@@ -20,7 +21,6 @@ import {
   createWelcomeMessage,
   Message,
   Mode,
-  QUICK_PROMPTS,
   resetTextareaHeight,
   resizeTextarea,
   Role,
@@ -28,10 +28,15 @@ import {
   uid,
 } from "@/reusable-components/chat/chatShared";
 import FloatingWidgetFrame from "@/reusable-components/floating/FloatingWidgetFrame";
+import type { ChatContent } from "@/lib/site-content-schema";
 
 type ChatOpenDetail = {
   prompt?: string;
 };
+
+interface FloatingChatProps {
+  content: ChatContent;
+}
 
 function renderMeta(meta?: string) {
   if (!meta) return null;
@@ -43,9 +48,12 @@ function renderMeta(meta?: string) {
   ));
 }
 
-export default function FloatingChat() {
+export default function FloatingChat({ content }: FloatingChatProps) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([createWelcomeMessage()]);
+  const [messages, setMessages] = useState<Message[]>([
+    createWelcomeMessage("welcome", content.welcomeMessage),
+  ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [mode, setMode] = useState<Mode>("stream");
@@ -131,7 +139,7 @@ export default function FloatingChat() {
   }, []);
 
   const clearChat = () => {
-    setMessages([createClearedMessage()]);
+    setMessages([createClearedMessage(undefined, content.clearedMessage)]);
     setStreamingId(null);
     setInput("");
     setHasUnread(false);
@@ -302,12 +310,16 @@ export default function FloatingChat() {
 
   const showQuickPrompts = messages.length <= 1 && !sending;
 
+  if (pathname?.startsWith("/admin")) {
+    return null;
+  }
+
   return (
     <FloatingWidgetFrame
       open={open}
       onOpen={() => setOpen(true)}
       placementClassName="bottom-5 right-4 z-50 sm:bottom-6 sm:right-6"
-      collapsedAriaLabel="Open Patrick AI chat"
+      collapsedAriaLabel={content.widgetOpenLabel}
       collapsedWidth={56}
       collapsedHeight={56}
       expandedWidth="min(26rem, calc(100vw - 1.5rem))"
@@ -352,7 +364,7 @@ export default function FloatingChat() {
               <div className="flex gap-2">
                 <span className="chat-status-pill">
                   <Sparkles className="h-3.5 w-3.5 text-sky-300" />
-                  Ready
+                  {content.readyLabel}
                 </span>
               </div>
             </div>
@@ -458,7 +470,7 @@ export default function FloatingChat() {
           >
             {showQuickPrompts && (
               <div className="mb-5 flex flex-wrap gap-2">
-                {QUICK_PROMPTS.slice(0, 3).map((prompt) => (
+                {content.quickPrompts.slice(0, 3).map((prompt) => (
                   <button
                     key={prompt.label}
                     onClick={() => {
@@ -584,7 +596,7 @@ export default function FloatingChat() {
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={sending}
-                  placeholder="Ask about Patrick's projects, strengths, or stack..."
+                  placeholder={content.composerPlaceholder}
                   rows={1}
                   className="min-h-[48px] max-h-[150px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/35"
                   onInput={(event) => resizeTextarea(event.currentTarget, 150)}

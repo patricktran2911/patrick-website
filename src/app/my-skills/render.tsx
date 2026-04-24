@@ -1,123 +1,74 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { IconType } from "react-icons";
-import {
-  SiJavascript,
-  SiTypescript,
-  SiReact,
-  SiNextdotjs,
-  SiSwift,
-  SiPython,
-  SiCplusplus,
-  SiNodedotjs,
-  SiFastapi,
-  SiSupabase,
-  SiPostgresql,
-  SiMongodb,
-  SiGithub,
-  SiFigma,
-  SiXcode,
-  SiJira,
-  SiAmazon,
-} from "react-icons/si";
 import PageWrapper from "@/reusable-components/PageWrapper";
+import { skillIconMap } from "@/lib/content-icons";
+import type { SkillsContent } from "@/lib/site-content-schema";
 
-interface SkillSection {
-  title: string;
-  icons: [IconType, string][];
+interface SkillsRenderProps {
+  content: SkillsContent;
 }
 
-const sections: SkillSection[] = [
-  {
-    title: "Languages & Frameworks",
-    icons: [
-      [SiJavascript, "JavaScript"],
-      [SiTypescript, "TypeScript"],
-      [SiReact, "React"],
-      [SiNextdotjs, "Next.js"],
-      [SiSwift, "Swift (SwiftUI/UIKit)"],
-      [SiPython, "Python"],
-      [SiCplusplus, "C++"],
-      [SiNodedotjs, "Node.js"],
-      [SiFastapi, "FastAPI"],
-    ],
-  },
-  {
-    title: "Databases & Cloud",
-    icons: [
-      [SiPostgresql, "SQL"],
-      [SiMongodb, "NoSQL"],
-      [SiSupabase, "Supabase"],
-      [SiAmazon, "AWS (S3, Amplify)"],
-    ],
-  },
-  {
-    title: "Tools & Design",
-    icons: [
-      [SiGithub, "Git / GitHub"],
-      [SiFigma, "Figma"],
-      [SiXcode, "Xcode"],
-      [SiJira, "Jira"],
-    ],
-  },
-];
-
-export default function Skills() {
+export default function Skills({ content }: SkillsRenderProps) {
   return (
     <PageWrapper className="min-h-full">
-      {/* Header */}
-      <header className="text-center px-6 pt-12 pb-8">
+      <header className="px-6 pb-8 pt-12 text-center">
         <motion.h1
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.7 }}
-          className="text-4xl sm:text-5xl font-extrabold text-white mb-4"
+          className="mb-4 text-4xl font-extrabold text-white sm:text-5xl"
         >
-          My Skills
+          {content.headerTitle}
         </motion.h1>
         <motion.p
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="text-lg text-white/70 max-w-2xl mx-auto font-light"
+          className="mx-auto max-w-2xl text-lg font-light text-white/70"
         >
-          Tools, languages, and technologies I use to build responsive web apps,
-          intelligent systems, and seamless mobile experiences.
+          {content.intro}
         </motion.p>
       </header>
 
-      {/* Skill sections */}
-      <div className="max-w-4xl mx-auto px-6 pb-20 space-y-8">
-        {sections.map((section, sIdx) => (
+      <div className="mx-auto max-w-4xl space-y-8 px-6 pb-20">
+        {content.sections.map((section, sectionIndex) => (
           <motion.section
             key={section.title}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.5, delay: sIdx * 0.1 }}
+            transition={{ duration: 0.5, delay: sectionIndex * 0.1 }}
             className="glass rounded-2xl p-8"
           >
-            <h2 className="text-xl font-bold text-white mb-6">
-              {section.title}
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {section.icons.map(([Icon, label], iIdx) => (
-                <motion.div
-                  key={label}
-                  initial={{ opacity: 0, y: 15 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.3, delay: iIdx * 0.05 }}
-                  whileHover={{ y: -4, scale: 1.05 }}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-white/5 transition-colors"
-                >
-                  <Icon className="w-8 h-8 text-indigo-400" />
-                  <span className="text-xs text-white/70 text-center font-medium">
-                    {label}
-                  </span>
-                </motion.div>
-              ))}
+            <h2 className="mb-6 text-xl font-bold text-white">{section.title}</h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {section.items.map((item, itemIndex) => {
+                const Icon = skillIconMap[item.iconKey];
+
+                return (
+                  <motion.div
+                    key={`${item.iconKey}-${item.label}`}
+                    initial={{ opacity: 0, y: 15 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.3, delay: itemIndex * 0.05 }}
+                    whileHover={{ y: -4, scale: 1.05 }}
+                    className="flex flex-col items-center gap-2 rounded-xl p-4 transition-colors hover:bg-white/5"
+                  >
+                    {Icon ? (
+                      <Icon className="h-8 w-8 text-indigo-400" />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-xs text-white/60">
+                        ?
+                      </div>
+                    )}
+                    <span className="text-center text-xs font-medium text-white/70">
+                      {item.label}
+                    </span>
+                  </motion.div>
+                );
+              })}
             </div>
           </motion.section>
         ))}

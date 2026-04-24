@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
+const distDir = process.env.NEXT_DIST_DIR;
+
 const nextConfig: NextConfig = {
+  ...(distDir ? { distDir } : {}),
   turbopack: {
     resolveExtensions: [".mdx", ".tsx", ".ts", ".jsx", ".js", ".mjs", ".json"],
   },

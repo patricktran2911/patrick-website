@@ -2,68 +2,40 @@
 
 import { motion } from "framer-motion";
 import PageWrapper from "@/reusable-components/PageWrapper";
+import type { AboutContent } from "@/lib/site-content-schema";
 
 const fade = {
   hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0 },
 };
 
-const journey = [
-  {
-    period: "2025 – Present",
-    title: "Full-Stack Developer @ NeuroSpring",
-    desc: "Building real-time camera streaming and AI classification systems for ambulance-based clinical research.",
-  },
-  {
-    period: "2024 – 2025",
-    title: "iOS Developer @ FanFly",
-    desc: "Developed the first modular SwiftUI app connecting artists and fans with reusable UI components.",
-  },
-  {
-    period: "2023 – 2024",
-    title: "iOS Developer @ Scoop",
-    desc: "Implemented features using SwiftUI and UIKit, integrating APIs with PromiseKit and Alamofire.",
-  },
-];
+interface AboutRenderProps {
+  content: AboutContent;
+}
 
-const techStack = [
-  "React / Next.js",
-  "TypeScript / JavaScript",
-  "Swift (SwiftUI, UIKit)",
-  "FastAPI / Node.js",
-  "Python / OpenCV / MediaPipe",
-  "SQL / NoSQL / Supabase",
-];
-
-export default function About() {
+export default function About({ content }: AboutRenderProps) {
   return (
     <PageWrapper className="min-h-full">
-      {/* Header */}
-      <header className="text-center px-6 pt-12 pb-8">
+      <header className="px-6 pb-8 pt-12 text-center">
         <motion.h1
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
-          className="text-4xl sm:text-5xl font-extrabold text-white mb-4"
+          className="mb-4 text-4xl font-extrabold text-white sm:text-5xl"
         >
-          About Me
+          {content.headerTitle}
         </motion.h1>
         <motion.p
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="text-lg text-white/70 max-w-2xl mx-auto font-light"
+          className="mx-auto max-w-2xl text-lg font-light text-white/70"
         >
-          I&apos;m Patrick Tran, a Software Engineer driven by curiosity and a
-          love for elegant, practical code. My work spans mobile development,
-          full-stack applications, and intelligent systems powered by computer
-          vision and AI.
+          {content.intro}
         </motion.p>
       </header>
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-6 pb-20 space-y-10">
-        {/* Journey */}
+      <div className="mx-auto max-w-4xl space-y-10 px-6 pb-20">
         <motion.section
           initial="hidden"
           whileInView="visible"
@@ -72,30 +44,30 @@ export default function About() {
           transition={{ duration: 0.6 }}
           className="glass rounded-2xl p-8"
         >
-          <h2 className="text-2xl font-bold text-white mb-6">My Journey</h2>
+          <h2 className="mb-6 text-2xl font-bold text-white">{content.journeyTitle}</h2>
           <div className="space-y-6">
-            {journey.map((item, i) => (
+            {content.journey.map((item, index) => (
               <motion.div
-                key={i}
+                key={`${item.period}-${item.title}`}
                 initial={{ opacity: 0, x: -20 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.15 }}
+                transition={{ duration: 0.5, delay: index * 0.15 }}
                 className="flex gap-4"
               >
                 <div className="flex flex-col items-center">
-                  <div className="w-3 h-3 rounded-full bg-indigo-500 mt-1.5" />
-                  {i < journey.length - 1 && (
-                    <div className="w-px flex-1 bg-indigo-500/30 mt-1" />
+                  <div className="mt-1.5 h-3 w-3 rounded-full bg-indigo-500" />
+                  {index < content.journey.length - 1 && (
+                    <div className="mt-1 w-px flex-1 bg-indigo-500/30" />
                   )}
                 </div>
                 <div className="pb-6">
-                  <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
                     {item.period}
                   </span>
-                  <h3 className="text-white font-semibold mt-1">{item.title}</h3>
-                  <p className="text-white/60 text-sm mt-1 leading-relaxed">
-                    {item.desc}
+                  <h3 className="mt-1 font-semibold text-white">{item.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-white/60">
+                    {item.description}
                   </p>
                 </div>
               </motion.div>
@@ -103,7 +75,6 @@ export default function About() {
           </div>
         </motion.section>
 
-        {/* Tech Stack */}
         <motion.section
           initial="hidden"
           whileInView="visible"
@@ -112,16 +83,16 @@ export default function About() {
           transition={{ duration: 0.6, delay: 0.1 }}
           className="glass rounded-2xl p-8"
         >
-          <h2 className="text-2xl font-bold text-white mb-4">Tech Stack</h2>
+          <h2 className="mb-4 text-2xl font-bold text-white">{content.techStackTitle}</h2>
           <div className="flex flex-wrap gap-3">
-            {techStack.map((tech, i) => (
+            {content.techStack.map((tech, index) => (
               <motion.span
                 key={tech}
                 initial={{ opacity: 0, scale: 0.8 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.3, delay: i * 0.06 }}
-                className="px-4 py-2 rounded-full text-sm font-medium text-indigo-300 bg-indigo-500/10 border border-indigo-500/20"
+                transition={{ duration: 0.3, delay: index * 0.06 }}
+                className="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-4 py-2 text-sm font-medium text-indigo-300"
               >
                 {tech}
               </motion.span>
@@ -129,7 +100,6 @@ export default function About() {
           </div>
         </motion.section>
 
-        {/* Beyond the Code */}
         <motion.section
           initial="hidden"
           whileInView="visible"
@@ -138,14 +108,8 @@ export default function About() {
           transition={{ duration: 0.6, delay: 0.2 }}
           className="glass rounded-2xl p-8"
         >
-          <h2 className="text-2xl font-bold text-white mb-4">
-            Beyond the Code
-          </h2>
-          <p className="text-white/60 leading-relaxed">
-            Outside of development, I enjoy building PCs, exploring local
-            trails, sipping hot tea while reading, and vibing to US-UK music. I
-            believe a balanced life fuels better creativity and solutions.
-          </p>
+          <h2 className="mb-4 text-2xl font-bold text-white">{content.beyondTitle}</h2>
+          <p className="leading-relaxed text-white/60">{content.beyondBody}</p>
         </motion.section>
       </div>
     </PageWrapper>

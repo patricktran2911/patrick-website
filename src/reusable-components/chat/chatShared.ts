@@ -15,35 +15,11 @@ export interface Message {
   meta?: string;
 }
 
-export interface PromptSuggestion {
-  label: string;
-  prompt: string;
-}
-
 export interface ContextOption {
   value: string;
   label: string;
   description: string;
 }
-
-export const QUICK_PROMPTS: PromptSuggestion[] = [
-  {
-    label: "Quick intro",
-    prompt: "Give me a quick summary of Patrick as an engineer.",
-  },
-  {
-    label: "Best project",
-    prompt: "Which project best shows Patrick's product and engineering skills?",
-  },
-  {
-    label: "AI experience",
-    prompt: "What AI and machine learning experience does Patrick have?",
-  },
-  {
-    label: "Tech stack",
-    prompt: "What technologies does Patrick work with most often?",
-  },
-];
 
 export const CONTEXT_OPTIONS: ContextOption[] = [
   {
@@ -80,19 +56,21 @@ export function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export function createWelcomeMessage(id = "welcome"): Message {
+export function createWelcomeMessage(id = "welcome", text?: string): Message {
   return {
     id,
     role: "assistant",
-    text: "Hi! I'm Patrick's AI assistant. Ask about his background, projects, skills, or experience.\n\nYou can chat in English or Vietnamese.",
+    text:
+      text ??
+      "Hi! I'm Patrick's AI assistant. Ask about his background, projects, skills, or experience.\n\nYou can chat in English or Vietnamese.",
   };
 }
 
-export function createClearedMessage(id = `welcome-${uid()}`): Message {
+export function createClearedMessage(id = `welcome-${uid()}`, text?: string): Message {
   return {
     id,
     role: "assistant",
-    text: "Fresh chat. Ask about Patrick's work, strengths, projects, or stack.",
+    text: text ?? "Fresh chat. Ask about Patrick's work, strengths, projects, or stack.",
   };
 }
 

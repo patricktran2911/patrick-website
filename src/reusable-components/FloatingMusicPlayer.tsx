@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -16,8 +17,8 @@ import {
 import FloatingWidgetFrame, {
   FLOATING_WIDGET_FRAME_TRANSITION,
 } from "@/reusable-components/floating/FloatingWidgetFrame";
+import type { MusicContent } from "@/lib/site-content-schema";
 
-const PLAYLIST_ID = "PLCuMjAlHEc4r25Skw7YhHnOlzVUDpDrQS";
 const PLAYER_CONTAINER_ID = "patrick-youtube-player";
 const DEFAULT_VOLUME = 72;
 
@@ -139,14 +140,21 @@ function loadYouTubeIframeApi() {
   return window.__patrickYouTubeIframeApiPromise;
 }
 
-export default function FloatingMusicPlayer() {
+interface FloatingMusicPlayerProps {
+  content: MusicContent;
+}
+
+export default function FloatingMusicPlayer({
+  content,
+}: FloatingMusicPlayerProps) {
+  const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState<"player" | "playlist">("player");
   const [playerReady, setPlayerReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTitle, setCurrentTitle] = useState("Patrick's playlist");
-  const [statusText, setStatusText] = useState("Open the player, then press play");
+  const [currentTitle, setCurrentTitle] = useState(content.defaultTrackTitle);
+  const [statusText, setStatusText] = useState(content.openPrompt);
   const [elapsed, setElapsed] = useState("0:00");
   const [duration, setDuration] = useState("0:00");
   const [progress, setProgress] = useState(0);
@@ -208,7 +216,7 @@ export default function FloatingMusicPlayer() {
       }
 
       setLoading(true);
-      setStatusText("Loading playlist...");
+      setStatusText(content.loadingLabel);
 
       const YT = await loadYouTubeIframeApi();
       const existingPlayer = playerRef.current as YTPlayerInstance | null;
@@ -221,7 +229,7 @@ export default function FloatingMusicPlayer() {
 
       return new Promise<YTPlayerInstance>((resolve, reject) => {
         const playlistConfig: YTPlayerPlaylistConfig = {
-          list: PLAYLIST_ID,
+          list: content.playlistId,
           listType: "playlist",
           index: 0,
         };
@@ -248,7 +256,7 @@ export default function FloatingMusicPlayer() {
               event.target.setVolume(volume);
               setVolume(event.target.getVolume());
               setStatusText(
-                shouldAutoplayRef.current ? "Starting playback..." : "Ready to play"
+                shouldAutoplayRef.current ? content.playLabel : content.defaultStatus
               );
 
               if (shouldAutoplayRef.current) {
@@ -265,14 +273,14 @@ export default function FloatingMusicPlayer() {
 
               if (event.data === playerState.PLAYING) {
                 setIsPlaying(true);
-                setStatusText("Now playing");
+                setStatusText(content.playLabel);
               } else if (event.data === playerState.PAUSED) {
                 setIsPlaying(false);
-                setStatusText("Paused");
+                setStatusText(content.pauseLabel);
               } else if (event.data === playerState.BUFFERING) {
-                setStatusText("Buffering...");
+                setStatusText(content.loadingLabel);
               } else if (event.data === playerState.CUED) {
-                setStatusText("Ready to play");
+                setStatusText(content.defaultStatus);
               } else if (event.data === playerState.ENDED) {
                 setIsPlaying(false);
                 setStatusText("Track ended");
@@ -290,7 +298,15 @@ export default function FloatingMusicPlayer() {
         });
       });
     },
-    [updateSnapshot, volume]
+    [
+      content.defaultStatus,
+      content.loadingLabel,
+      content.pauseLabel,
+      content.playLabel,
+      content.playlistId,
+      updateSnapshot,
+      volume,
+    ]
   );
 
   useEffect(() => {
@@ -335,7 +351,7 @@ export default function FloatingMusicPlayer() {
       player.nextVideo();
       player.playVideo();
       setView("player");
-      setStatusText("Skipping to the next track...");
+      setStatusText(content.nextLabel);
     } catch (error) {
       setStatusText((error as Error).message);
     }
@@ -347,7 +363,7 @@ export default function FloatingMusicPlayer() {
       player.previousVideo();
       player.playVideo();
       setView("player");
-      setStatusText("Going back...");
+      setStatusText(content.previousLabel);
     } catch (error) {
       setStatusText((error as Error).message);
     }
@@ -367,7 +383,7 @@ export default function FloatingMusicPlayer() {
       player.playVideoAt(index);
       setPlaylistIndex(index);
       setView("player");
-      setStatusText(`Starting track ${String(index + 1).padStart(2, "0")}...`);
+      setStatusText(`${content.playLabel} ${String(index + 1).padStart(2, "0")}...`);
     } catch (error) {
       setStatusText((error as Error).message);
     }
@@ -377,6 +393,10 @@ export default function FloatingMusicPlayer() {
     if (playlistTitles[videoId]) return playlistTitles[videoId];
     if (index === playlistIndex && currentTitle) return currentTitle;
     return `Track ${String(index + 1).padStart(2, "0")}`;
+  }
+
+  if (pathname?.startsWith("/admin")) {
+    return null;
   }
 
   return (
@@ -391,7 +411,7 @@ export default function FloatingMusicPlayer() {
         open={expanded}
         onOpen={handleExpand}
         placementClassName="bottom-5 left-4 z-30 sm:bottom-6 sm:left-6"
-        collapsedAriaLabel="Open playlist player"
+        collapsedAriaLabel={content.widgetOpenLabel}
         collapsedWidth={56}
         collapsedHeight={56}
         expandedWidth="min(22rem, calc(100vw - 1.5rem))"
@@ -415,7 +435,7 @@ export default function FloatingMusicPlayer() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/42">
-                    Playlist Player
+                    {content.panelTitle}
                   </p>
                   <p className="truncate text-sm font-medium text-white">
                     {currentTitle}
@@ -429,7 +449,9 @@ export default function FloatingMusicPlayer() {
                     setView((prev) => (prev === "player" ? "playlist" : "player"))
                   }
                   className="music-control h-9 w-9"
-                  aria-label={view === "player" ? "Show playlist" : "Show player"}
+                  aria-label={
+                    view === "player" ? content.showPlaylistLabel : content.showPlayerLabel
+                  }
                 >
                   {view === "player" ? (
                     <ListMusic className="h-4 w-4" />
@@ -443,7 +465,7 @@ export default function FloatingMusicPlayer() {
                     setView("player");
                   }}
                   className="music-control h-9 w-9"
-                  aria-label="Minimize music player"
+                  aria-label={content.minimizeLabel}
                 >
                   <Minimize2 className="h-4 w-4" />
                 </button>
@@ -460,10 +482,10 @@ export default function FloatingMusicPlayer() {
                   <div className="mb-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-3">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <p className="truncate text-sm text-white/70">
-                        Patrick's YouTube playlist
+                        {content.playlistTitle}
                       </p>
                       <span className="text-[11px] text-white/42">
-                        {loading ? "Loading" : statusText}
+                        {loading ? content.loadingLabel : statusText}
                       </span>
                     </div>
 
@@ -486,7 +508,7 @@ export default function FloatingMusicPlayer() {
                         void handlePrevious();
                       }}
                       className="music-control h-11 w-11"
-                      aria-label="Previous track"
+                      aria-label={content.previousLabel}
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </button>
@@ -495,21 +517,21 @@ export default function FloatingMusicPlayer() {
                         void handleTogglePlay();
                       }}
                       className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-medium text-slate-950 transition hover:-translate-y-0.5 disabled:cursor-not-allowed"
-                      aria-label={isPlaying ? "Pause music" : "Play music"}
+                      aria-label={isPlaying ? content.pauseLabel : content.playLabel}
                     >
                       {isPlaying ? (
                         <Pause className="h-4 w-4" />
                       ) : (
                         <Play className="h-4 w-4" />
                       )}
-                      {isPlaying ? "Pause" : "Play"}
+                      {isPlaying ? content.pauseLabel : content.playLabel}
                     </button>
                     <button
                       onClick={() => {
                         void handleNext();
                       }}
                       className="music-control h-11 w-11"
-                      aria-label="Next track"
+                      aria-label={content.nextLabel}
                     >
                       <ChevronRight className="h-4 w-4" />
                     </button>
@@ -519,7 +541,7 @@ export default function FloatingMusicPlayer() {
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-white/60">
                         <Volume2 className="h-4 w-4" />
-                        <span className="text-xs">Volume</span>
+                        <span className="text-xs">{content.volumeLabel}</span>
                       </div>
                       <span className="text-xs text-white/48">{volume}%</span>
                     </div>
@@ -538,9 +560,11 @@ export default function FloatingMusicPlayer() {
                 <div className="flex h-full w-1/2 flex-col pl-2">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-white">Playlist</p>
+                      <p className="text-sm font-medium text-white">
+                        {content.playlistHeading}
+                      </p>
                       <p className="text-[11px] text-white/42">
-                        Select a track from the queue
+                        {content.playlistDescription}
                       </p>
                     </div>
                     <span className="text-[11px] text-white/42">
@@ -571,7 +595,7 @@ export default function FloatingMusicPlayer() {
                               </span>
                               {active && (
                                 <span className="text-[11px] font-medium text-sky-300">
-                                  Current
+                                  {content.currentBadge}
                                 </span>
                               )}
                             </div>
@@ -584,8 +608,8 @@ export default function FloatingMusicPlayer() {
                     ) : (
                       <div className="rounded-2xl border border-dashed border-white/10 px-3 py-6 text-center text-sm text-white/48">
                         {loading
-                          ? "Loading playlist..."
-                          : "Open the player to load the playlist."}
+                          ? content.loadingLabel
+                          : content.openPrompt}
                       </div>
                     )}
                   </div>
