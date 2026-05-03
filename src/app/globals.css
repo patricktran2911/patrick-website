@@ -142,6 +142,13 @@ body {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+.chat-toolbar-button-active {
+  color: #fff;
+  border-color: rgba(44, 195, 255, 0.28);
+  background: rgba(44, 195, 255, 0.12);
+  box-shadow: 0 10px 24px rgba(44, 195, 255, 0.14);
+}
+
 .chat-status-pill {
   display: inline-flex;
   align-items: center;
@@ -184,6 +191,106 @@ body {
   font-size: 0.68rem;
   line-height: 1;
   white-space: nowrap;
+}
+
+.chat-audio-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.7rem;
+  line-height: 1;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.chat-audio-button:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(44, 195, 255, 0.24);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.chat-audio-button-active {
+  border-color: rgba(44, 195, 255, 0.32);
+  background: rgba(44, 195, 255, 0.12);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(44, 195, 255, 0.16);
+}
+
+.chat-voice-card {
+  border: 1px solid rgba(44, 195, 255, 0.16);
+  background:
+    radial-gradient(circle at top left, rgba(44, 195, 255, 0.16), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+    rgba(3, 7, 17, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 44px rgba(2, 6, 23, 0.28);
+}
+
+.chat-voice-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--chat-accent-start), var(--chat-accent-end));
+  box-shadow:
+    0 0 0 8px rgba(44, 195, 255, 0.08),
+    0 18px 40px rgba(44, 195, 255, 0.22);
+}
+
+.chat-voice-orb-recording {
+  background: linear-gradient(135deg, #fb7185, #ef4444);
+  box-shadow:
+    0 0 0 8px rgba(244, 63, 94, 0.12),
+    0 18px 40px rgba(244, 63, 94, 0.24);
+  animation: voice-pulse 1.25s ease-in-out infinite;
+}
+
+.chat-voice-primary-button,
+.chat-voice-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.35rem;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.chat-voice-primary-button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #fff;
+  color: #0f172a;
+}
+
+.chat-voice-primary-button:hover,
+.chat-voice-secondary-button:hover {
+  transform: translateY(-1px);
+}
+
+.chat-voice-secondary-button {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .chat-input-shell {
@@ -339,6 +446,17 @@ body {
 @keyframes blink {
   50% {
     opacity: 0;
+  }
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.04);
   }
 }
 

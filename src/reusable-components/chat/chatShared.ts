@@ -1,10 +1,12 @@
 "use client";
 
-export const BASE_URL =
-  process.env.NEXT_PUBLIC_AI_API_URL ?? "https://ai-dev.patrickcs-web.com";
+export const BASE_URL = (
+  process.env.NEXT_PUBLIC_AI_API_URL ?? "https://ai-dev.patrickcs-web.com"
+).replace(/\/$/, "");
+export const AI_USER_ID = process.env.NEXT_PUBLIC_AI_USER_ID ?? "patrick";
 
 export type Role = "user" | "assistant";
-export type Mode = "stream" | "sync";
+export type InputKind = "text" | "speech";
 
 export interface Message {
   id: string;
@@ -13,6 +15,9 @@ export interface Message {
   context?: string;
   supported?: boolean;
   meta?: string;
+  audioUrl?: string;
+  audioMimeType?: string;
+  inputKind?: InputKind;
 }
 
 export interface ContextOption {

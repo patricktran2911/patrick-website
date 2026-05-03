@@ -1,26 +1,29 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
+  Loader2,
   MessageCircle,
+  Mic,
+  PhoneCall,
   Send,
   Settings2,
   Sparkles,
+  Square,
   Trash2,
+  Volume2,
   X,
 } from "lucide-react";
 import {
-  BASE_URL,
   buildMetaLabel,
   COMPOSER_HINT,
   CONTEXT_OPTIONS,
   createClearedMessage,
   createWelcomeMessage,
   Message,
-  Mode,
   resetTextareaHeight,
   resizeTextarea,
   Role,
@@ -29,6 +32,16 @@ import {
 } from "@/reusable-components/chat/chatShared";
 import FloatingWidgetFrame from "@/reusable-components/floating/FloatingWidgetFrame";
 import type { ChatContent } from "@/lib/site-content-schema";
+import {
+  sendSpeech,
+  sendSpeechToSpeech,
+  sendTextToSpeech,
+  sendTextToText,
+} from "@/reusable-components/chat/chatApi";
+import {
+  formatRecordingTime,
+  getPreferredRecorderMimeType,
+} from "@/reusable-components/chat/chatAudio";
 
 type ChatOpenDetail = {
   prompt?: string;
@@ -48,6 +61,36 @@ function renderMeta(meta?: string) {
   ));
 }
 
+function formatVoiceRequestError(error: Error) {
+  if (error.message.includes("404") || error.message.includes("Not Found")) {
+    return "Patrick voice mode is not live on the current AI server yet.";
+  }
+
+  return error.message;
+}
+
+function formatMicrophoneError(error: unknown) {
+  if (typeof window !== "undefined" && !window.isSecureContext) {
+    return "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again.";
+  }
+
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return "Microphone permission was denied. Allow microphone access in the browser address bar, then try again.";
+    }
+
+    if (error.name === "NotFoundError") {
+      return "No microphone was found on this device.";
+    }
+
+    if (error.name === "NotReadableError") {
+      return "The microphone is busy in another app. Close the other app and try again.";
+    }
+  }
+
+  return (error as Error)?.message || "Unable to access the microphone.";
+}
+
 export default function FloatingChat({ content }: FloatingChatProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -56,16 +99,28 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [mode, setMode] = useState<Mode>("stream");
   const [context, setContext] = useState("auto");
   const [sessionId, setSessionId] = useState(`session-${uid()}`);
   const [showSettings, setShowSettings] = useState(false);
-  const [streamingId, setStreamingId] = useState<string | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(
+    null
+  );
+  const [composerNotice, setComposerNotice] = useState<string | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
 
   const openRef = useRef(open);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderChunksRef = useRef<Blob[]>([]);
+  const recorderStreamRef = useRef<MediaStream | null>(null);
+  const shouldSubmitRecordingRef = useRef(false);
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ownedAudioUrlsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     openRef.current = open;
@@ -88,6 +143,16 @@ export default function FloatingChat({ content }: FloatingChatProps) {
 
     return () => window.clearTimeout(timer);
   }, [open]);
+
+  useEffect(() => {
+    if (!recording) return;
+
+    const interval = window.setInterval(() => {
+      setRecordingSeconds((previous) => previous + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [recording]);
 
   useEffect(() => {
     const handleExternalOpen = (incoming: Event) => {
@@ -118,10 +183,30 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     };
   }, []);
 
+  const rememberAudioUrl = useCallback((audioUrl: string) => {
+    ownedAudioUrlsRef.current.add(audioUrl);
+    return audioUrl;
+  }, []);
+
+  const stopPlayback = useCallback(() => {
+    const audio = playbackAudioRef.current;
+    if (!audio) return;
+
+    audio.pause();
+    audio.currentTime = 0;
+    playbackAudioRef.current = null;
+    setPlayingMessageId(null);
+  }, []);
+
+  const revokeOwnedAudioUrls = useCallback(() => {
+    ownedAudioUrlsRef.current.forEach((audioUrl) => URL.revokeObjectURL(audioUrl));
+    ownedAudioUrlsRef.current.clear();
+  }, []);
+
   const addMessage = useCallback(
     (role: Role, text: string, extra?: Partial<Message>) => {
       const message: Message = { id: uid(), role, text, ...extra };
-      setMessages((prev) => [...prev, message]);
+      setMessages((previous) => [...previous, message]);
 
       if (role === "assistant" && !openRef.current) {
         setHasUnread(true);
@@ -133,182 +218,385 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   );
 
   const updateMessage = useCallback((id: string, update: Partial<Message>) => {
-    setMessages((prev) =>
-      prev.map((message) => (message.id === id ? { ...message, ...update } : message))
+    setMessages((previous) =>
+      previous.map((message) => (message.id === id ? { ...message, ...update } : message))
     );
   }, []);
 
-  const clearChat = () => {
+  const stopRecorderStream = useCallback(() => {
+    recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recorderStreamRef.current = null;
+  }, []);
+
+  const abortRecording = useCallback(() => {
+    if (!recorderRef.current) return;
+
+    shouldSubmitRecordingRef.current = false;
+    setRecording(false);
+    setRecordingSeconds(0);
+    recorderRef.current.stop();
+  }, []);
+
+  const toggleVoiceMode = useCallback(() => {
+    if (recording) {
+      abortRecording();
+    }
+
+    setVoiceMode((previous) => !previous);
+    setComposerNotice(null);
+  }, [abortRecording, recording]);
+
+  const playAudioUrlForMessage = useCallback(
+    async (messageId: string, audioUrl: string) => {
+      stopPlayback();
+
+      const audio = new Audio(audioUrl);
+      playbackAudioRef.current = audio;
+      setPlayingMessageId(messageId);
+
+      const cleanup = () => {
+        if (playbackAudioRef.current === audio) {
+          playbackAudioRef.current = null;
+          setPlayingMessageId(null);
+        }
+      };
+
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+
+      try {
+        await audio.play();
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+    },
+    [stopPlayback]
+  );
+
+  const handleSpeakMessage = useCallback(
+    async (message: Message) => {
+      if (!message.text.trim()) return;
+
+      if (playingMessageId === message.id) {
+        stopPlayback();
+        return;
+      }
+
+      setComposerNotice(null);
+
+      try {
+        if (message.audioUrl) {
+          await playAudioUrlForMessage(message.id, message.audioUrl);
+          return;
+        }
+
+        setSynthesizingMessageId(message.id);
+        const spoken = await sendSpeech(message.text, {
+          context: message.context ?? context,
+          sessionId,
+        });
+        const audioUrl = rememberAudioUrl(spoken.audioUrl);
+
+        updateMessage(message.id, {
+          audioUrl,
+          audioMimeType: spoken.audioMimeType,
+        });
+
+        await playAudioUrlForMessage(message.id, audioUrl);
+      } catch (error) {
+        setComposerNotice(formatVoiceRequestError(error as Error));
+      } finally {
+        setSynthesizingMessageId((previous) =>
+          previous === message.id ? null : previous
+        );
+      }
+    },
+    [
+      context,
+      playingMessageId,
+      playAudioUrlForMessage,
+      rememberAudioUrl,
+      sessionId,
+      stopPlayback,
+      updateMessage,
+    ]
+  );
+
+  const submitSpeechQuestion = useCallback(
+    async (audioBlob: Blob) => {
+      const placeholderId = addMessage("user", "Transcribing your voice question...", {
+        inputKind: "speech",
+        meta: "Voice input",
+      });
+
+      setSending(true);
+      setComposerNotice(null);
+
+      try {
+        const result = await sendSpeechToSpeech(audioBlob, { context, sessionId });
+
+        updateMessage(placeholderId, {
+          text: result.transcript,
+          meta: "Voice input",
+          inputKind: "speech",
+        });
+
+        let audioUrl = result.audioUrl;
+        let audioMimeType = result.audioMimeType;
+
+        if (!audioUrl) {
+          const spoken = await sendSpeech(result.answer);
+          audioUrl = spoken.audioUrl;
+          audioMimeType = spoken.audioMimeType;
+        }
+
+        const ownedAudioUrl = audioUrl ? rememberAudioUrl(audioUrl) : undefined;
+        const assistantId = addMessage("assistant", result.answer, {
+          context: result.resolvedContext,
+          audioUrl: ownedAudioUrl,
+          audioMimeType,
+          meta: buildMetaLabel({
+            requestedContext: context,
+            resolvedContext: result.resolvedContext,
+            transport: "Voice chat",
+          }),
+        });
+
+        if (ownedAudioUrl) {
+          await playAudioUrlForMessage(assistantId, ownedAudioUrl);
+        }
+      } catch (error) {
+        const voiceError = formatVoiceRequestError(error as Error);
+        updateMessage(placeholderId, {
+          text: "Voice question",
+          supported: false,
+          meta: "Voice input",
+        });
+        addMessage("assistant", `Error: ${voiceError}`, {
+          supported: false,
+        });
+        setComposerNotice(voiceError);
+      } finally {
+        setSending(false);
+      }
+    },
+    [
+      addMessage,
+      context,
+      playAudioUrlForMessage,
+      rememberAudioUrl,
+      sessionId,
+      updateMessage,
+    ]
+  );
+
+  const startRecording = useCallback(async () => {
+    if (sending) return;
+
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setComposerNotice("Voice capture is not supported in this browser.");
+      return;
+    }
+
+    try {
+      if (!window.isSecureContext) {
+        throw new Error(
+          "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again."
+        );
+      }
+
+      setVoiceMode(true);
+      stopPlayback();
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMimeType = getPreferredRecorderMimeType();
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
+
+      recorderStreamRef.current = stream;
+      recorderRef.current = recorder;
+      recorderChunksRef.current = [];
+      shouldSubmitRecordingRef.current = true;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recorderChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const shouldSubmit = shouldSubmitRecordingRef.current;
+        shouldSubmitRecordingRef.current = false;
+
+        const blob =
+          recorderChunksRef.current.length > 0
+            ? new Blob(recorderChunksRef.current, {
+                type: recorder.mimeType || preferredMimeType || "audio/webm",
+              })
+            : null;
+
+        recorderChunksRef.current = [];
+        recorderRef.current = null;
+        stopRecorderStream();
+
+        if (shouldSubmit && blob && blob.size > 0) {
+          void submitSpeechQuestion(blob);
+        }
+      };
+
+      recorder.start();
+      setRecording(true);
+      setRecordingSeconds(0);
+      setComposerNotice(null);
+    } catch (error) {
+      stopRecorderStream();
+      recorderRef.current = null;
+      setComposerNotice(formatMicrophoneError(error));
+    }
+  }, [sending, stopPlayback, stopRecorderStream, submitSpeechQuestion]);
+
+  const stopRecordingAndSend = useCallback(() => {
+    if (!recorderRef.current) return;
+
+    shouldSubmitRecordingRef.current = true;
+    setRecording(false);
+    setRecordingSeconds(0);
+    recorderRef.current.stop();
+  }, []);
+
+  const clearChat = useCallback(() => {
+    abortRecording();
+    stopPlayback();
+    revokeOwnedAudioUrls();
     setMessages([createClearedMessage(undefined, content.clearedMessage)]);
-    setStreamingId(null);
     setInput("");
     setHasUnread(false);
+    setComposerNotice(null);
+    setSynthesizingMessageId(null);
     resetTextareaHeight(inputRef.current);
     inputRef.current?.focus();
-  };
+  }, [
+    abortRecording,
+    content.clearedMessage,
+    revokeOwnedAudioUrls,
+    stopPlayback,
+  ]);
 
-  async function submitMessage(rawText: string) {
-    const text = rawText.trim();
-    if (!text || sending) return;
-
-    setInput("");
-    resetTextareaHeight(inputRef.current);
-    setSending(true);
-    addMessage("user", text);
-
-    const body: Record<string, string> = { message: text, context };
-    if (sessionId) body.session_id = sessionId;
-
-    try {
-      if (mode === "stream") {
-        await sendStream(body);
-      } else {
-        await sendSync(body);
-      }
-    } catch (error) {
-      addMessage("assistant", `Error: ${(error as Error).message}`, {
-        supported: false,
-      });
-    } finally {
-      setSending(false);
-      setStreamingId(null);
+  useEffect(() => {
+    if (!open && recording) {
+      abortRecording();
     }
-  }
+  }, [abortRecording, open, recording]);
 
-  async function handleSend() {
-    await submitMessage(input);
-  }
+  useEffect(() => {
+    return () => {
+      abortRecording();
+      stopRecorderStream();
+      stopPlayback();
+      revokeOwnedAudioUrls();
+    };
+  }, [
+    abortRecording,
+    revokeOwnedAudioUrls,
+    stopPlayback,
+    stopRecorderStream,
+  ]);
 
-  async function sendStream(body: Record<string, string>) {
-    const assistantId = uid();
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantId, role: "assistant", text: "" },
-    ]);
-    setStreamingId(assistantId);
+  const submitTextMessage = useCallback(
+    async (rawText: string) => {
+      const text = rawText.trim();
+      if (!text || sending || recording) return;
 
-    const response = await fetch(`${BASE_URL}/api/v1/ai/chat/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+      setInput("");
+      setComposerNotice(null);
+      resetTextareaHeight(inputRef.current);
+      setSending(true);
+      stopPlayback();
+      addMessage("user", text, { inputKind: "text" });
 
-    if (response.status === 429) {
-      updateMessage(assistantId, {
-        text: "Rate limit reached. Please wait a minute before sending another message.",
-        supported: false,
-      });
-      return;
-    }
+      try {
+        const result = voiceMode
+          ? await sendTextToSpeech(text, { context, sessionId })
+          : await sendTextToText(text, { context, sessionId });
+        const audioUrl =
+          voiceMode && "audioUrl" in result && typeof result.audioUrl === "string"
+            ? rememberAudioUrl(result.audioUrl)
+            : undefined;
+        const audioMimeType =
+          voiceMode &&
+          "audioMimeType" in result &&
+          typeof result.audioMimeType === "string"
+            ? result.audioMimeType
+            : undefined;
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(
-        (error as Record<string, string>).error || `HTTP ${response.status}`
-      );
-    }
+        const assistantId = addMessage("assistant", result.answer, {
+          context: result.resolvedContext,
+          audioUrl,
+          audioMimeType,
+          meta: buildMetaLabel({
+            requestedContext: context,
+            resolvedContext: result.resolvedContext,
+            transport: voiceMode ? "Text to speech" : "Text to text",
+            chunksValidated: result.chunksValidated,
+            chunksRetrieved: result.chunksRetrieved,
+          }),
+        });
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("The live response stream could not be read.");
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let textContent = "";
-    let supported = true;
-    let resolvedContext = body.context;
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-
-          const payload = JSON.parse(line.slice(6));
-
-          if (payload.token !== undefined) {
-            textContent += payload.token;
-            updateMessage(assistantId, { text: textContent });
-          }
-
-          if (payload.done) {
-            supported = payload.supported !== false;
-            if (payload.context) resolvedContext = payload.context;
-          }
-
-          if (payload.error) {
-            textContent += `[Error: ${payload.error}]`;
-            updateMessage(assistantId, { text: textContent });
-            supported = false;
-          }
+        if (voiceMode && audioUrl) {
+          await playAudioUrlForMessage(assistantId, audioUrl);
         }
+      } catch (error) {
+        addMessage("assistant", `Error: ${(error as Error).message}`, {
+          supported: false,
+        });
+        setComposerNotice((error as Error).message);
+      } finally {
+        setSending(false);
       }
-    } finally {
-      updateMessage(assistantId, {
-        text: textContent || "I do not have enough information to answer that yet.",
-        supported,
-        context: resolvedContext,
-        meta: buildMetaLabel({
-          requestedContext: body.context,
-          resolvedContext,
-          transport: "Live stream",
-        }),
-      });
-    }
-  }
+    },
+    [
+      addMessage,
+      context,
+      playAudioUrlForMessage,
+      recording,
+      rememberAudioUrl,
+      sending,
+      sessionId,
+      stopPlayback,
+      voiceMode,
+    ]
+  );
 
-  async function sendSync(body: Record<string, string>) {
-    const response = await fetch(`${BASE_URL}/api/v1/ai/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const handleSend = useCallback(async () => {
+    await submitTextMessage(input);
+  }, [input, submitTextMessage]);
 
-    if (response.status === 429) {
-      addMessage(
-        "assistant",
-        "Rate limit reached. Please wait a minute before sending another message.",
-        { supported: false }
-      );
-      return;
-    }
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        void handleSend();
+      }
+    },
+    [handleSend]
+  );
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-    const answer = data.data?.answer || "";
-    const isSupported = data.data?.supported !== false;
-    const meta = data.meta || {};
-    const resolvedContext = meta.context || body.context;
-
-    addMessage("assistant", answer, {
-      supported: isSupported,
-      context: resolvedContext,
-      meta: buildMetaLabel({
-        requestedContext: body.context,
-        resolvedContext,
-        transport: "Single response",
-        chunksValidated: meta.chunks_validated,
-        chunksRetrieved: meta.chunks_retrieved,
-      }),
-    });
-  }
-
-  function handleKeyDown(event: React.KeyboardEvent) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void handleSend();
-    }
-  }
-
-  const showQuickPrompts = messages.length <= 1 && !sending;
+  const showQuickPrompts = messages.length <= 1 && !sending && !recording;
+  const voiceActivityLabel = recording
+    ? `Listening ${formatRecordingTime(recordingSeconds)}`
+    : sending
+      ? "Patrick AI is thinking..."
+      : playingMessageId
+        ? "Playing Patrick's voice..."
+        : voiceMode
+          ? "Tap the mic and speak naturally."
+          : "Text and voice ready";
 
   if (pathname?.startsWith("/admin")) {
     return null;
@@ -322,8 +610,8 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       collapsedAriaLabel={content.widgetOpenLabel}
       collapsedWidth={56}
       collapsedHeight={56}
-      expandedWidth="min(26rem, calc(100vw - 1.5rem))"
-      expandedHeight="min(40rem, calc(100vh - 7rem))"
+      expandedWidth="min(27rem, calc(100vw - 1.5rem))"
+      expandedHeight="min(42rem, calc(100vh - 7rem))"
       collapsedRadius={999}
       expandedRadius={28}
       collapsedSurfaceClassName="chat-fab"
@@ -364,7 +652,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
               <div className="flex gap-2">
                 <span className="chat-status-pill">
                   <Sparkles className="h-3.5 w-3.5 text-sky-300" />
-                  {content.readyLabel}
+                  {recording ? "Listening" : voiceMode ? "Voice chat" : content.readyLabel}
                 </span>
               </div>
             </div>
@@ -372,7 +660,19 @@ export default function FloatingChat({ content }: FloatingChatProps) {
             <div className="flex items-center gap-1">
               <motion.button
                 whileTap={{ scale: 0.94 }}
-                onClick={() => setShowSettings((prev) => !prev)}
+                onClick={toggleVoiceMode}
+                className={`chat-toolbar-button h-10 px-3 ${
+                  voiceMode ? "chat-toolbar-button-active" : ""
+                }`}
+                aria-label={voiceMode ? "Turn off voice chat" : "Turn on voice chat"}
+                aria-pressed={voiceMode}
+              >
+                <PhoneCall className="h-4 w-4" />
+                <span className="hidden text-xs font-medium sm:inline">Voice</span>
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.94 }}
+                onClick={() => setShowSettings((previous) => !previous)}
                 className="chat-toolbar-button h-10 w-10"
                 aria-label="Toggle chat settings"
               >
@@ -429,23 +729,13 @@ export default function FloatingChat({ content }: FloatingChatProps) {
 
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                     <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
-                      Delivery mode
+                      Voice features
                     </label>
-                    <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
-                      {(["stream", "sync"] as const).map((item) => (
-                        <button
-                          key={item}
-                          onClick={() => setMode(item)}
-                          className={`rounded-xl px-3 py-2 text-sm transition-all ${
-                            mode === item
-                              ? "bg-white text-slate-950 shadow-sm"
-                              : "text-white/60 hover:text-white"
-                          }`}
-                        >
-                          {item === "stream" ? "Live stream" : "Single reply"}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-sm leading-6 text-white/58">
+                      Text questions use Hetzner text-to-text by default. Voice chat
+                      uploads microphone audio to speech-to-speech, and voice mode uses
+                      text-to-speech for typed prompts with audio replies.
+                    </p>
                   </div>
 
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
@@ -474,9 +764,9 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                   <button
                     key={prompt.label}
                     onClick={() => {
-                      void submitMessage(prompt.prompt);
+                      void submitTextMessage(prompt.prompt);
                     }}
-                    disabled={sending}
+                    disabled={sending || recording}
                     className="chat-chip px-3.5 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Sparkles className="h-3 w-3 text-sky-300" />
@@ -486,11 +776,77 @@ export default function FloatingChat({ content }: FloatingChatProps) {
               </div>
             )}
 
+            <AnimatePresence initial={false}>
+              {voiceMode && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="chat-voice-card mb-5 rounded-[26px] p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`chat-voice-orb ${
+                        recording ? "chat-voice-orb-recording" : ""
+                      }`}
+                    >
+                      {recording ? (
+                        <Square className="h-5 w-5" />
+                      ) : (
+                        <Mic className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white">
+                        Voice chat with Patrick AI
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-white/52">
+                        {voiceActivityLabel}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (recording) {
+                          stopRecordingAndSend();
+                        } else {
+                          void startRecording();
+                        }
+                      }}
+                      disabled={sending && !recording}
+                      className="chat-voice-primary-button disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {recording ? "Send voice" : "Tap to talk"}
+                    </button>
+                    {recording && (
+                      <button
+                        type="button"
+                        onClick={abortRecording}
+                        className="chat-voice-secondary-button"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="space-y-4 pb-5">
               <AnimatePresence initial={false}>
                 {messages.map((message) => {
                   const isUser = message.role === "user";
                   const isError = message.supported === false;
+                  const canSpeakAssistantMessage =
+                    message.role === "assistant" &&
+                    !isError &&
+                    message.text.trim().length > 0;
+                  const isPlayingThisMessage = playingMessageId === message.id;
+                  const isSynthesizingThisMessage = synthesizingMessageId === message.id;
 
                   return (
                     <motion.div
@@ -522,6 +878,12 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                             }`}
                           >
                             <span>{isUser ? "You" : "Assistant"}</span>
+                            {message.inputKind === "speech" && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-white/6 px-2 py-1 text-[9px] tracking-[0.18em] text-white/42">
+                                <Mic className="h-2.5 w-2.5" />
+                                Voice
+                              </span>
+                            )}
                           </div>
 
                           <div
@@ -534,10 +896,38 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                             }`}
                           >
                             {message.text}
-                            {streamingId === message.id && (
-                              <span className="ml-1 inline-block h-3.5 w-0.5 align-text-bottom cursor-blink bg-sky-300" />
-                            )}
                           </div>
+
+                          {canSpeakAssistantMessage && (
+                            <div
+                              className={`mt-2 flex ${isUser ? "justify-end" : "justify-start"}`}
+                            >
+                              <button
+                                onClick={() => {
+                                  void handleSpeakMessage(message);
+                                }}
+                                className={`chat-audio-button ${
+                                  isPlayingThisMessage ? "chat-audio-button-active" : ""
+                                }`}
+                                aria-label={
+                                  isPlayingThisMessage
+                                    ? "Stop assistant audio"
+                                    : "Play assistant audio"
+                                }
+                              >
+                                {isSynthesizingThisMessage ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Volume2 className="h-3.5 w-3.5" />
+                                )}
+                                {isSynthesizingThisMessage
+                                  ? "Generating voice"
+                                  : isPlayingThisMessage
+                                    ? "Stop voice"
+                                    : "Play voice"}
+                              </button>
+                            </div>
+                          )}
 
                           {message.meta && (
                             <div
@@ -555,7 +945,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                 })}
               </AnimatePresence>
 
-              {sending && !streamingId && (
+              {sending && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -595,34 +985,60 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={sending}
+                  disabled={sending || recording}
                   placeholder={content.composerPlaceholder}
                   rows={1}
                   className="min-h-[48px] max-h-[150px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/35"
                   onInput={(event) => resizeTextarea(event.currentTarget, 150)}
                 />
+
                 <motion.button
+                  type="button"
+                  onClick={() => {
+                    if (recording) {
+                      stopRecordingAndSend();
+                    } else {
+                      void startRecording();
+                    }
+                  }}
+                  disabled={sending}
+                  whileHover={{ scale: !sending ? 1.02 : 1 }}
+                  whileTap={{ scale: !sending ? 0.96 : 1 }}
+                  className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 ${
+                    recording
+                      ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30"
+                      : "bg-white/10 text-white hover:bg-white/16"
+                  }`}
+                  aria-label={recording ? "Stop recording and send" : "Record voice question"}
+                >
+                  {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </motion.button>
+
+                <motion.button
+                  type="button"
                   onClick={() => {
                     void handleSend();
                   }}
-                  disabled={!input.trim() || sending}
-                  whileHover={{ scale: input.trim() && !sending ? 1.02 : 1 }}
-                  whileTap={{ scale: input.trim() && !sending ? 0.96 : 1 }}
+                  disabled={!input.trim() || sending || recording}
+                  whileHover={{ scale: input.trim() && !sending && !recording ? 1.02 : 1 }}
+                  whileTap={{ scale: input.trim() && !sending && !recording ? 0.96 : 1 }}
                   className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
                   aria-label="Send message"
                 >
-                  <Send className="h-4 w-4" />
+                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </motion.button>
               </div>
 
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-2">
-                <p className="text-[11px] text-white/40">{COMPOSER_HINT}</p>
+                <p
+                  className={`text-[11px] ${
+                    composerNotice ? "text-rose-300" : "text-white/40"
+                  }`}
+                >
+                  {composerNotice ?? COMPOSER_HINT}
+                </p>
                 <p className="text-[11px] text-white/40">
-                  {sending
-                    ? "Drafting..."
-                    : mode === "stream"
-                      ? "Live stream on"
-                      : "Single reply on"}
+                  {voiceActivityLabel}
                 </p>
               </div>
             </div>

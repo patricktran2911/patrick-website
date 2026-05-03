@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
-      "media-src 'self'",
+      "media-src 'self' blob: data:",
       "font-src 'self'",
       "frame-src https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://drive.google.com https://docs.google.com",
       "connect-src 'self' https://api.emailjs.com https://challenges.cloudflare.com https://ai-dev.patrickcs-web.com https://www.youtube.com https://www.youtube-nocookie.com",
@@ -31,7 +31,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=()",
+            value: "camera=(), microphone=(self), geolocation=()",
           },
           { key: "Content-Security-Policy", value: csp },
         ],
