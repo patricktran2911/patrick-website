@@ -1,7 +1,7 @@
 "use client";
 
 export const BASE_URL = (
-  process.env.NEXT_PUBLIC_AI_API_URL ?? "https://ai-dev.patrickcs-web.com"
+  process.env.NEXT_PUBLIC_AI_PROXY_URL ?? "/api/ai"
 ).replace(/\/$/, "");
 export const AI_USER_ID = process.env.NEXT_PUBLIC_AI_USER_ID ?? "patrick";
 

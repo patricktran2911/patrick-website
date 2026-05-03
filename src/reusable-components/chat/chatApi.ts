@@ -37,7 +37,6 @@ export interface SpeechToSpeechResult {
 }
 
 const AUDIO_RESPONSE_FORMAT = "mp3";
-const API_KEY = process.env.NEXT_PUBLIC_AI_API_KEY?.trim();
 
 function getNestedValue(payload: unknown, path: string[]) {
   return path.reduce<unknown>((value, key) => {
@@ -71,18 +70,9 @@ function pickNumberLike(payload: unknown, paths: string[][]) {
   return undefined;
 }
 
-function getAuthHeaders(): Record<string, string> {
-  if (!API_KEY) return {};
-
-  return {
-    Authorization: `Bearer ${API_KEY}`,
-  };
-}
-
 function getJsonHeaders(): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    ...getAuthHeaders(),
   };
 }
 
@@ -325,7 +315,6 @@ export async function sendSpeechToSpeech(
 
   const response = await fetch(`${BASE_URL}/api/v1/ai/speech-to-speech`, {
     method: "POST",
-    headers: getAuthHeaders(),
     body: formData,
   });
 

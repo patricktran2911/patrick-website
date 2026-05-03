@@ -2,6 +2,9 @@
 
 This website chat now uses the newer AI endpoints with a split transport model:
 
+- Browser requests go to same-origin `/api/ai/...` routes first. Those routes
+  proxy to `https://ai-dev.patrickcs-web.com/...` server-side to avoid browser
+  CORS failures.
 - `POST /api/v1/ai/text-to-text`
   Used for typed questions in the floating chat.
 - `POST /api/v1/ai/speech`
@@ -17,6 +20,9 @@ This website chat now uses the newer AI endpoints with a split transport model:
   Owns the floating chat experience, message rendering, recorder lifecycle, and playback UX.
 - `src/reusable-components/chat/chatApi.ts`
   Centralizes all client-side AI endpoint calls so transport logic is not duplicated in the UI.
+- `src/app/api/ai/[...path]/route.ts`
+  Proxies website-origin requests to the Hetzner AI API and keeps optional API
+  keys server-side.
 - `src/reusable-components/chat/chatAudio.ts`
   Holds small audio helpers such as recorder MIME selection and recording time formatting.
 - `src/reusable-components/chat/chatShared.ts`
@@ -36,8 +42,11 @@ This website chat now uses the newer AI endpoints with a split transport model:
 ## Notes
 
 - `chatApi.ts` is intentionally tolerant of plain-text or JSON text answers so backend response formatting can evolve without breaking the UI.
-- The browser client only calls the Hetzner AI API base URL. It does not call
-  Self-Host or CosyVoice services directly.
+- The browser client only calls the website's same-origin proxy. The proxy only
+  calls the Hetzner AI API base URL; it does not call Self-Host or CosyVoice
+  services directly.
+- Set `AI_API_KEY` or `APP_API_KEY` on the website server if the Hetzner backend
+  enables API-key auth. Avoid exposing API keys with `NEXT_PUBLIC_` variables.
 - Voice playback intentionally does not fall back to the browser speech engine, because that would use the device voice instead of Patrick's backend voice.
 - The current voice routes are request-and-response flows, not true realtime streaming. ChatGPT-style live voice will need a continuous transport layer such as WebSocket or WebRTC on the AI backend.
 - Object URLs created for generated audio are tracked and revoked when the chat clears or unmounts to avoid leaking browser memory.
