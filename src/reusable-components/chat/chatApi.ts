@@ -53,10 +53,13 @@ export type TextToSpeechStreamEvent =
     }
   | {
       type: "done";
+      audioCount: number;
     };
 
 const AUDIO_RESPONSE_FORMAT = "mp3";
 const DEFAULT_VOICE_SPEED = 0.86;
+export const VOICE_UNAVAILABLE_MESSAGE =
+  "Patrick voice is temporarily unavailable right now.";
 const DEFAULT_VOICE_INSTRUCTIONS =
   "Speak in natural, warm conversational English at a lightly brisk pace. Keep every word clear and easy to understand, with a calm Vietnamese-English accent.";
 
@@ -115,19 +118,27 @@ function getJsonHeaders(): Record<string, string> {
 }
 
 function extractErrorMessage(payload: unknown, fallbackStatus: number) {
-  if (typeof payload === "string" && payload.trim().length > 0) {
-    return payload.trim();
+  const directMessage =
+    typeof payload === "string" && payload.trim().length > 0 ? payload.trim() : "";
+
+  const structuredMessage = pickString(payload, [
+    ["error"],
+    ["message"],
+    ["detail"],
+    ["data", "error"],
+    ["data", "message"],
+  ]);
+
+  const message = directMessage || structuredMessage || `HTTP ${fallbackStatus}`;
+
+  if (
+    message.includes("Speech provider 'local' error") ||
+    message.includes("Local voice service unavailable")
+  ) {
+    return VOICE_UNAVAILABLE_MESSAGE;
   }
 
-  return (
-    pickString(payload, [
-      ["error"],
-      ["message"],
-      ["detail"],
-      ["data", "error"],
-      ["data", "message"],
-    ]) || `HTTP ${fallbackStatus}`
-  );
+  return message;
 }
 
 function buildChatPayload(text: string, options: ChatRequestOptions) {
@@ -161,10 +172,27 @@ function buildChatSpeechPayload(text: string, options: ChatRequestOptions) {
   };
 }
 
+function normalizeBase64(base64: string) {
+  const withoutPrefix = base64.includes(",") ? base64.split(",").pop() ?? base64 : base64;
+  const normalized = withoutPrefix.replace(/-/g, "+").replace(/_/g, "/").trim();
+  const padding = normalized.length % 4;
+
+  if (padding === 0) {
+    return normalized;
+  }
+
+  return `${normalized}${"=".repeat(4 - padding)}`;
+}
+
 function createAudioUrlFromBase64(base64: string, mimeType: string) {
-  const normalized = base64.includes(",") ? base64.split(",").pop() ?? base64 : base64;
+  const normalized = normalizeBase64(base64);
   const binary = atob(normalized);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+
+  if (bytes.byteLength === 0) {
+    throw new Error(VOICE_UNAVAILABLE_MESSAGE);
+  }
+
   return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
 }
 
@@ -296,6 +324,10 @@ export async function sendSpeech(
   }
 
   const audioBlob = await response.blob();
+  if (audioBlob.size === 0) {
+    throw new Error(VOICE_UNAVAILABLE_MESSAGE);
+  }
+
   return {
     audioUrl: URL.createObjectURL(audioBlob),
     audioMimeType: response.headers.get("content-type") || "audio/mpeg",
@@ -356,6 +388,8 @@ export async function streamTextToSpeech(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let audioCount = 0;
+  let doneSeen = false;
 
   const handleLine = async (line: string) => {
     if (!line.trim()) return;
@@ -390,6 +424,7 @@ export async function streamTextToSpeech(
     if (payload.type === "audio") {
       const audio = createAudioResultFromPayload(payload);
       if (!audio) return;
+      audioCount += 1;
 
       await onEvent({
         type: "audio",
@@ -405,7 +440,8 @@ export async function streamTextToSpeech(
     }
 
     if (payload.type === "done") {
-      await onEvent({ type: "done" });
+      doneSeen = true;
+      await onEvent({ type: "done", audioCount });
     }
   };
 
@@ -425,6 +461,32 @@ export async function streamTextToSpeech(
   if (buffer.trim()) {
     await handleLine(buffer);
   }
+
+  if (!doneSeen) {
+    await onEvent({ type: "done", audioCount });
+  }
+}
+
+export async function getVoiceServiceAvailability() {
+  const response = await fetch(`${BASE_URL}/voice/local-health`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (response.ok) {
+    return {
+      available: true,
+      message: "",
+    };
+  }
+
+  const payload = await parseResponsePayload(response);
+  return {
+    available: false,
+    message: extractErrorMessage(payload.data, response.status),
+  };
 }
 
 function getAudioMimeType(payload: unknown) {

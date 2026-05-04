@@ -33,6 +33,7 @@ import {
 import FloatingWidgetFrame from "@/reusable-components/floating/FloatingWidgetFrame";
 import type { ChatContent } from "@/lib/site-content-schema";
 import {
+  getVoiceServiceAvailability,
   sendSpeech,
   sendTextToText,
   streamTextToSpeech,
@@ -78,6 +79,14 @@ function renderMeta(meta?: string) {
 }
 
 function formatVoiceRequestError(error: Error) {
+  if (
+    error.message.includes("temporarily unavailable") ||
+    error.message.includes("Local voice service unavailable") ||
+    error.message.includes("Speech provider 'local' error")
+  ) {
+    return "Patrick voice is temporarily unavailable right now.";
+  }
+
   if (error.message.includes("404") || error.message.includes("Not Found")) {
     return "Patrick voice mode is not live on the current AI server yet.";
   }
@@ -416,6 +425,10 @@ export default function FloatingChat({ content }: FloatingChatProps) {
 
     try {
       await ensureMicrophoneReady();
+      const voiceAvailability = await getVoiceServiceAvailability();
+      if (!voiceAvailability.available) {
+        throw new Error(voiceAvailability.message);
+      }
       stopPlayback();
       setComposerNotice(null);
       voiceModeRef.current = true;
@@ -673,10 +686,12 @@ export default function FloatingChat({ content }: FloatingChatProps) {
         if (shouldUseVoiceReply) {
           let assistantId: string | null = null;
           const audioUrls: string[] = [];
+          let answerResolvedContext = context;
           setVoicePhase("thinking");
 
           await streamTextToSpeech(text, { context, sessionId }, async (event) => {
             if (event.type === "answer") {
+              answerResolvedContext = event.resolvedContext;
               assistantId = addMessage("assistant", event.answer, {
                 context: event.resolvedContext,
                 audioUrls,
@@ -706,6 +721,26 @@ export default function FloatingChat({ content }: FloatingChatProps) {
 
               setVoicePhase("speaking");
               await playAudioUrlForMessage(assistantId, ownedAudioUrl, true);
+              return;
+            }
+
+            if (event.type === "done" && event.audioCount === 0) {
+              const unavailableMessage =
+                "Patrick voice is temporarily unavailable right now. The text answer arrived without audio.";
+              setComposerNotice(unavailableMessage);
+
+              if (assistantId) {
+                updateMessage(assistantId, {
+                  meta: buildMetaLabel({
+                    requestedContext: context,
+                    resolvedContext: answerResolvedContext,
+                    transport:
+                      inputKind === "speech"
+                        ? "Voice call text-only"
+                        : "Text response only",
+                  }),
+                });
+              }
             }
           });
 
@@ -980,7 +1015,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                       Voice call mode listens hands-free in the browser, turns
                       your speech into text, then streams Patrick&apos;s answer and
                       MP3 voice reply sentence by sentence from the production AI
-                      endpoint.
+                      endpoint using Patrick&apos;s cached speaker profile.
                     </p>
                   </div>
 

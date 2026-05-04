@@ -39,6 +39,9 @@ This website chat now uses the newer AI endpoints with a split transport model:
 - Hands-free voice call mode uses browser speech recognition for user speech,
   sends the transcript through `text-to-speech/stream`, and then resumes
   listening after Patrick's audio reply finishes.
+- If the stream ends without any audio chunks, the UI keeps the text answer,
+  surfaces a Patrick-voice availability notice, and avoids feeding the browser
+  an empty audio source.
 - Assistant replies can be spoken on demand through the `speech` endpoint.
 
 ## Notes
@@ -46,12 +49,20 @@ This website chat now uses the newer AI endpoints with a split transport model:
 - `chatApi.ts` is intentionally tolerant of plain-text or JSON text answers so backend response formatting can evolve without breaking the UI.
 - The browser client calls the Hetzner AI API base URL on production and does
   not call Self-Host or CosyVoice services directly.
+- The backend now keeps Patrick enrolled as a cached CosyVoice speaker profile,
+  so normal FE voice generation does not need to send a reference WAV or
+  `voice_reference_text` on each request.
+- `voice_reference_text` is now mainly an enrollment or refresh concern on the
+  backend side rather than part of the normal FE runtime path.
 - Set `AI_API_KEY` or `APP_API_KEY` on the website server if the Hetzner backend
   enables API-key auth. Avoid exposing API keys with `NEXT_PUBLIC_` variables.
 - Optional public tuning variables: set `NEXT_PUBLIC_AI_VOICE_SPEED` and
   `NEXT_PUBLIC_AI_VOICE_INSTRUCTIONS` to adjust the speed/style sent with every
   browser voice request. Set `NEXT_PUBLIC_AI_VOICE_INPUT_LANG` to override the
   browser speech-recognition language. The default speed is `0.86`.
+- Voice call activation now preflights `/api/ai/voice/local-health` so the UI
+  can stop early with a clear message when Patrick's backend voice service is
+  unavailable.
 - Voice playback intentionally does not fall back to the browser speech engine, because that would use the device voice instead of Patrick's backend voice.
 - The current voice call is hands-free and turn-based, but it is still not true full-duplex realtime audio. ChatGPT-style live voice with simultaneous streaming both directions will need a continuous transport such as WebSocket or WebRTC on the AI backend.
 - Object URLs created for generated audio are tracked and revoked when the chat clears or unmounts to avoid leaking browser memory.
