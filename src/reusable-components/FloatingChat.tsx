@@ -37,6 +37,7 @@ import {
   sendSpeechToSpeech,
   sendTextToSpeech,
   sendTextToText,
+  VOICE_SAMPLE_TEXT,
 } from "@/reusable-components/chat/chatApi";
 import {
   formatRecordingTime,
@@ -111,6 +112,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   );
   const [composerNotice, setComposerNotice] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceSampleLoading, setVoiceSampleLoading] = useState(false);
 
   const openRef = useRef(open);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -323,6 +325,41 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     ]
   );
 
+  const playVoiceSample = useCallback(async () => {
+    if (voiceSampleLoading || sending || recording) return;
+
+    setVoiceMode(true);
+    setComposerNotice(null);
+    setVoiceSampleLoading(true);
+    stopPlayback();
+
+    try {
+      const spoken = await sendSpeech(VOICE_SAMPLE_TEXT, { context, sessionId });
+      const audioUrl = rememberAudioUrl(spoken.audioUrl);
+      const assistantId = addMessage("assistant", VOICE_SAMPLE_TEXT, {
+        audioUrl,
+        audioMimeType: spoken.audioMimeType,
+        meta: "Voice sample",
+      });
+
+      await playAudioUrlForMessage(assistantId, audioUrl);
+    } catch (error) {
+      setComposerNotice(formatVoiceRequestError(error as Error));
+    } finally {
+      setVoiceSampleLoading(false);
+    }
+  }, [
+    addMessage,
+    context,
+    playAudioUrlForMessage,
+    recording,
+    rememberAudioUrl,
+    sending,
+    sessionId,
+    stopPlayback,
+    voiceSampleLoading,
+  ]);
+
   const submitSpeechQuestion = useCallback(
     async (audioBlob: Blob) => {
       const placeholderId = addMessage("user", "Transcribing your voice question...", {
@@ -479,6 +516,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     setHasUnread(false);
     setComposerNotice(null);
     setSynthesizingMessageId(null);
+    setVoiceSampleLoading(false);
     resetTextareaHeight(inputRef.current);
     inputRef.current?.focus();
   }, [
@@ -831,6 +869,21 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                         Cancel
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void playVoiceSample();
+                      }}
+                      disabled={voiceSampleLoading || sending || recording}
+                      className="chat-voice-secondary-button disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {voiceSampleLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5" />
+                      )}
+                      Voice sample
+                    </button>
                   </div>
                 </motion.div>
               )}

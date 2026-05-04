@@ -37,6 +37,28 @@ export interface SpeechToSpeechResult {
 }
 
 const AUDIO_RESPONSE_FORMAT = "mp3";
+const DEFAULT_VOICE_SPEED = 0.86;
+const DEFAULT_VOICE_INSTRUCTIONS =
+  "Speak in natural, warm conversational English at a lightly brisk pace. Keep every word clear and easy to understand, with a calm Vietnamese-English accent.";
+
+export const VOICE_SAMPLE_TEXT =
+  "Hi, this is Patrick's AI voice test. I will speak a little faster, but still clearly for the website chat.";
+
+function getVoiceSpeed() {
+  const configured = Number(process.env.NEXT_PUBLIC_AI_VOICE_SPEED);
+  if (Number.isFinite(configured) && configured >= 0.25 && configured <= 4) {
+    return configured;
+  }
+
+  return DEFAULT_VOICE_SPEED;
+}
+
+function getVoiceInstructions() {
+  return (
+    process.env.NEXT_PUBLIC_AI_VOICE_INSTRUCTIONS ??
+    DEFAULT_VOICE_INSTRUCTIONS
+  ).trim();
+}
 
 function getNestedValue(payload: unknown, path: string[]) {
   return path.reduce<unknown>((value, key) => {
@@ -102,9 +124,24 @@ function buildChatPayload(text: string, options: ChatRequestOptions) {
 }
 
 function buildSpeechPayload(text: string) {
+  const instructions = getVoiceInstructions();
+
   return {
     text,
     response_format: AUDIO_RESPONSE_FORMAT,
+    speed: getVoiceSpeed(),
+    ...(instructions ? { instructions } : {}),
+  };
+}
+
+function buildChatSpeechPayload(text: string, options: ChatRequestOptions) {
+  const instructions = getVoiceInstructions();
+
+  return {
+    ...buildChatPayload(text, options),
+    response_format: AUDIO_RESPONSE_FORMAT,
+    speed: getVoiceSpeed(),
+    ...(instructions ? { instructions } : {}),
   };
 }
 
@@ -239,10 +276,7 @@ export async function sendTextToSpeech(
   const response = await fetch(`${BASE_URL}/text-to-speech`, {
     method: "POST",
     headers: getJsonHeaders(),
-    body: JSON.stringify({
-      ...buildChatPayload(text, options),
-      response_format: AUDIO_RESPONSE_FORMAT,
-    }),
+    body: JSON.stringify(buildChatSpeechPayload(text, options)),
   });
 
   const payload = await parseResponsePayload(response);
@@ -308,6 +342,12 @@ export async function sendSpeechToSpeech(
   formData.append("context", options.context);
   formData.append("user_id", options.userId ?? AI_USER_ID);
   formData.append("response_format", AUDIO_RESPONSE_FORMAT);
+  formData.append("speed", String(getVoiceSpeed()));
+
+  const instructions = getVoiceInstructions();
+  if (instructions) {
+    formData.append("instructions", instructions);
+  }
 
   if (options.sessionId) {
     formData.append("session_id", options.sessionId);

@@ -39,6 +39,9 @@ This website chat now uses the newer AI endpoints with a split transport model:
   - the answer as the assistant message
   - the returned `audio.base64` as playable audio
 - Assistant replies can be spoken on demand through the `speech` endpoint.
+- The voice panel includes a `Voice sample` action that asks the backend to
+  generate a real MP3 through `POST /api/ai/speech`; this checks the same
+  frontend delivery path used by assistant playback.
 
 ## Notes
 
@@ -48,6 +51,9 @@ This website chat now uses the newer AI endpoints with a split transport model:
   services directly.
 - Set `AI_API_KEY` or `APP_API_KEY` on the website server if the Hetzner backend
   enables API-key auth. Avoid exposing API keys with `NEXT_PUBLIC_` variables.
+- Optional public tuning variables: set `NEXT_PUBLIC_AI_VOICE_SPEED` and
+  `NEXT_PUBLIC_AI_VOICE_INSTRUCTIONS` to adjust the speed/style sent with every
+  browser voice request. The default speed is `0.86`.
 - Voice playback intentionally does not fall back to the browser speech engine, because that would use the device voice instead of Patrick's backend voice.
 - The current voice routes are request-and-response flows, not true realtime streaming. ChatGPT-style live voice will need a continuous transport layer such as WebSocket or WebRTC on the AI backend.
 - Object URLs created for generated audio are tracked and revoked when the chat clears or unmounts to avoid leaking browser memory.

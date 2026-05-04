@@ -14,6 +14,17 @@ const SERVER_API_KEY = (
 const AI_PATH_PREFIX = ["api", "v1", "ai"];
 const CORE_PATH_PREFIX = ["api", "v1"];
 const CORE_ENDPOINTS = new Set(["health", "info"]);
+const FORWARDED_RESPONSE_HEADERS = [
+  "content-type",
+  "cache-control",
+  "content-disposition",
+  "x-audio-provider",
+  "x-audio-format",
+  "x-voice-speed",
+  "x-voice-style",
+  "x-voice-pauses",
+  "x-voice-tempo",
+];
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -62,11 +73,11 @@ function buildUpstreamHeaders(request: Request) {
 
 function buildResponseHeaders(response: Response) {
   const headers = new Headers();
-  const contentType = response.headers.get("content-type");
-  const cacheControl = response.headers.get("cache-control");
 
-  if (contentType) headers.set("content-type", contentType);
-  if (cacheControl) headers.set("cache-control", cacheControl);
+  FORWARDED_RESPONSE_HEADERS.forEach((headerName) => {
+    const value = response.headers.get(headerName);
+    if (value) headers.set(headerName, value);
+  });
 
   return headers;
 }
