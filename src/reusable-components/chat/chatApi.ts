@@ -36,13 +36,20 @@ export interface SpeechToSpeechResult {
   audioMimeType?: string;
 }
 
-export type TextToSpeechStreamEvent =
+export type VoiceReplyStreamEvent =
   | {
-      type: "answer";
-      answer: string;
+      type: "meta";
       resolvedContext: string;
-      chunksValidated?: string | number;
-      chunksRetrieved?: string | number;
+      speechStreaming?: string;
+    }
+  | {
+      type: "answer_delta";
+      text: string;
+    }
+  | {
+      type: "sentence";
+      index: number;
+      text: string;
     }
   | {
       type: "audio";
@@ -53,7 +60,7 @@ export type TextToSpeechStreamEvent =
     }
   | {
       type: "done";
-      audioCount: number;
+      answer: string;
     };
 
 const AUDIO_RESPONSE_FORMAT = "mp3";
@@ -366,10 +373,10 @@ export async function sendTextToSpeech(
   };
 }
 
-export async function streamTextToSpeech(
+export async function streamVoiceReply(
   text: string,
   options: ChatRequestOptions,
-  onEvent: (event: TextToSpeechStreamEvent) => void | Promise<void>
+  onEvent: (event: VoiceReplyStreamEvent) => void | Promise<void>
 ): Promise<void> {
   const response = await fetch(`${BASE_URL}/text-to-speech/stream`, {
     method: "POST",
@@ -388,35 +395,42 @@ export async function streamTextToSpeech(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let audioCount = 0;
   let doneSeen = false;
 
   const handleLine = async (line: string) => {
     if (!line.trim()) return;
 
     const payload = JSON.parse(line) as Record<string, unknown>;
-    if (payload.type === "answer") {
+    if (payload.type === "meta") {
       await onEvent({
-        type: "answer",
-        answer:
-          pickString(payload, [
-            ["answer"],
-            ["data", "answer"],
-          ]) || "",
+        type: "meta",
         resolvedContext:
-          pickString(payload, [
-            ["data", "context"],
-            ["meta", "context"],
-            ["context"],
-          ]) || options.context,
-        chunksValidated: pickNumberLike(payload, [
-          ["meta", "chunks_validated"],
-          ["chunks_validated"],
+          pickString(payload, [["context"], ["data", "context"], ["meta", "context"]]) ||
+          options.context,
+        speechStreaming: pickString(payload, [
+          ["speech", "streaming"],
+          ["data", "speech", "streaming"],
         ]),
-        chunksRetrieved: pickNumberLike(payload, [
-          ["meta", "chunks_retrieved"],
-          ["chunks_retrieved"],
-        ]),
+      });
+      return;
+    }
+
+    if (payload.type === "answer_delta") {
+      await onEvent({
+        type: "answer_delta",
+        text: pickString(payload, [["text"], ["delta"], ["data", "text"]]),
+      });
+      return;
+    }
+
+    if (payload.type === "sentence") {
+      await onEvent({
+        type: "sentence",
+        index:
+          typeof payload.index === "number"
+            ? payload.index
+            : Number(payload.index ?? 0),
+        text: typeof payload.text === "string" ? payload.text : "",
       });
       return;
     }
@@ -424,7 +438,6 @@ export async function streamTextToSpeech(
     if (payload.type === "audio") {
       const audio = createAudioResultFromPayload(payload);
       if (!audio) return;
-      audioCount += 1;
 
       await onEvent({
         type: "audio",
@@ -441,7 +454,10 @@ export async function streamTextToSpeech(
 
     if (payload.type === "done") {
       doneSeen = true;
-      await onEvent({ type: "done", audioCount });
+      await onEvent({
+        type: "done",
+        answer: pickString(payload, [["answer"], ["data", "answer"]]),
+      });
     }
   };
 
@@ -463,7 +479,7 @@ export async function streamTextToSpeech(
   }
 
   if (!doneSeen) {
-    await onEvent({ type: "done", audioCount });
+    await onEvent({ type: "done", answer: "" });
   }
 }
 

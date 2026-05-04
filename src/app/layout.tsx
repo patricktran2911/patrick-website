@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/reusable-components/NavBar";
 import FloatingChat from "@/reusable-components/FloatingChat";
 import FloatingMusicPlayer from "@/reusable-components/FloatingMusicPlayer";
+import FloatingVoiceChat from "@/reusable-components/FloatingVoiceChat";
 import { getSiteContent } from "@/lib/site-content";
 
 const geistSans = Geist({
@@ -62,6 +63,7 @@ export default async function RootLayout({
           <main className="flex-1 overflow-auto">{children}</main>
         </div>
         <FloatingMusicPlayer content={content.music} />
+        <FloatingVoiceChat content={content.voiceChat} />
         <FloatingChat content={content.chat} />
       </body>
     </html>

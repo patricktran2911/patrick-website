@@ -343,6 +343,24 @@
       }
     ]
   },
+  "voiceChat": {
+    "widgetOpenLabel": "Open Patrick voice chat",
+    "panelTitle": "Voice Chat",
+    "panelDescription": "Talk hands-free with Patrick's AI voice.",
+    "readyLabel": "Voice ready",
+    "connectingLabel": "Connecting",
+    "listeningLabel": "Listening",
+    "thinkingLabel": "Thinking",
+    "speakingLabel": "Speaking",
+    "startCallLabel": "Start call",
+    "endCallLabel": "End call",
+    "clearLabel": "Clear history",
+    "transcriptLabel": "Live transcript",
+    "transcriptPlaceholder": "Speak naturally. Patrick will answer in voice, then the mic will reopen automatically.",
+    "historyLabel": "Call transcript",
+    "emptyHistoryLabel": "Start the call to build a live transcript here.",
+    "minimizeLabel": "Minimize voice chat"
+  },
   "music": {
     "songUrls": [
       "https://www.youtube.com/watch?v=FM7MFYoylVs",

@@ -149,6 +149,25 @@ export interface ChatContent {
   quickPrompts: ChatPrompt[];
 }
 
+export interface VoiceChatContent {
+  widgetOpenLabel: string;
+  panelTitle: string;
+  panelDescription: string;
+  readyLabel: string;
+  connectingLabel: string;
+  listeningLabel: string;
+  thinkingLabel: string;
+  speakingLabel: string;
+  startCallLabel: string;
+  endCallLabel: string;
+  clearLabel: string;
+  transcriptLabel: string;
+  transcriptPlaceholder: string;
+  historyLabel: string;
+  emptyHistoryLabel: string;
+  minimizeLabel: string;
+}
+
 export interface MusicContent {
   songUrls: string[];
   widgetOpenLabel: string;
@@ -181,6 +200,7 @@ export interface SiteContent {
   resume: ResumeContent;
   contact: ContactContent;
   chat: ChatContent;
+  voiceChat: VoiceChatContent;
   music: MusicContent;
 }
 
@@ -230,6 +250,11 @@ export const SITE_CONTENT_SECTION_ORDER: Array<{
     key: "chat",
     label: "Chat",
     description: "Chat page copy, widget labels, and quick prompt content.",
+  },
+  {
+    key: "voiceChat",
+    label: "Voice Chat",
+    description: "Hands-free voice widget labels, prompts, and transcript copy.",
   },
   {
     key: "music",

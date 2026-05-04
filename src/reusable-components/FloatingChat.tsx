@@ -7,8 +7,6 @@ import {
   ChevronDown,
   Loader2,
   MessageCircle,
-  Mic,
-  PhoneCall,
   Send,
   Settings2,
   Sparkles,
@@ -22,51 +20,28 @@ import {
   CONTEXT_OPTIONS,
   createClearedMessage,
   createWelcomeMessage,
-  type InputKind,
-  type Message,
   resetTextareaHeight,
   resizeTextarea,
-  type Role,
   splitMetaLabel,
+  type Message,
+  type Role,
   uid,
 } from "@/reusable-components/chat/chatShared";
+import { sendSpeech, sendTextToText } from "@/reusable-components/chat/chatApi";
+import {
+  isPlaybackInterrupted,
+  useAudioPlayback,
+} from "@/reusable-components/chat/useAudioPlayback";
 import FloatingWidgetFrame from "@/reusable-components/floating/FloatingWidgetFrame";
 import type { ChatContent } from "@/lib/site-content-schema";
-import {
-  getVoiceServiceAvailability,
-  sendSpeech,
-  sendTextToText,
-  streamTextToSpeech,
-} from "@/reusable-components/chat/chatApi";
-import {
-  type BrowserSpeechRecognition,
-  type BrowserSpeechRecognitionErrorEvent,
-  type BrowserSpeechRecognitionEvent,
-  formatRecordingTime,
-  getPreferredRecognitionLanguage,
-  getSpeechRecognitionConstructor,
-  getSpeechRecognitionErrorMessage,
-  isSpeechRecognitionSupported,
-} from "@/reusable-components/chat/chatAudio";
 
 type ChatOpenDetail = {
   prompt?: string;
 };
 
-type VoicePhase = "idle" | "listening" | "thinking" | "speaking";
-type RecognitionDesiredState = "off" | "listening" | "paused";
-
 interface FloatingChatProps {
   content: ChatContent;
 }
-
-interface SubmitTextMessageOptions {
-  inputKind?: InputKind;
-  meta?: string;
-  preferVoiceReply?: boolean;
-}
-
-const PLAYBACK_INTERRUPTED_ERROR = "PLAYBACK_INTERRUPTED";
 
 function renderMeta(meta?: string) {
   if (!meta) return null;
@@ -94,37 +69,6 @@ function formatVoiceRequestError(error: Error) {
   return error.message;
 }
 
-function formatMicrophoneAccessError(error: unknown) {
-  if (typeof window !== "undefined" && !window.isSecureContext) {
-    return "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again.";
-  }
-
-  const recognitionMessage = getSpeechRecognitionErrorMessage(error);
-  if (recognitionMessage) {
-    return recognitionMessage;
-  }
-
-  if (error instanceof DOMException) {
-    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-      return "Microphone permission was denied. Allow microphone access in the browser address bar, then try again.";
-    }
-
-    if (error.name === "NotFoundError") {
-      return "No microphone was found on this device.";
-    }
-
-    if (error.name === "NotReadableError") {
-      return "The microphone is busy in another app. Close the other app and try again.";
-    }
-  }
-
-  return (error as Error)?.message || "Unable to access the microphone.";
-}
-
-function isPlaybackInterrupted(error: unknown) {
-  return error instanceof Error && error.message === PLAYBACK_INTERRUPTED_ERROR;
-}
-
 export default function FloatingChat({ content }: FloatingChatProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -137,56 +81,37 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   const [sessionId, setSessionId] = useState(`session-${uid()}`);
   const [showSettings, setShowSettings] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
-  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(
     null
   );
   const [composerNotice, setComposerNotice] = useState<string | null>(null);
-  const [voiceMode, setVoiceMode] = useState(false);
-  const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
-  const [listeningSeconds, setListeningSeconds] = useState(0);
-  const [liveTranscript, setLiveTranscript] = useState("");
 
   const openRef = useRef(open);
-  const voiceModeRef = useRef(voiceMode);
   const sendingRef = useRef(sending);
-  const playingMessageIdRef = useRef<string | null>(playingMessageId);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
-  const playbackStopResolverRef = useRef<(() => void) | null>(null);
-  const playbackRunIdRef = useRef(0);
-  const ownedAudioUrlsRef = useRef<Set<string>>(new Set());
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const recognitionActiveRef = useRef(false);
-  const recognitionStartTimerRef = useRef<number | null>(null);
-  const desiredRecognitionStateRef = useRef<RecognitionDesiredState>("off");
-  const submitTextMessageRef = useRef<
-    ((text: string, options?: SubmitTextMessageOptions) => Promise<void>) | null
-  >(null);
-  const startVoiceRecognitionRef = useRef<(() => Promise<void>) | null>(null);
+
+  const {
+    playingMessageId,
+    playAudioUrlForMessage,
+    rememberAudioUrl,
+    revokeOwnedAudioUrls,
+    stopPlayback,
+  } = useAudioPlayback();
 
   useEffect(() => {
     openRef.current = open;
   }, [open]);
 
   useEffect(() => {
-    voiceModeRef.current = voiceMode;
-  }, [voiceMode]);
-
-  useEffect(() => {
     sendingRef.current = sending;
   }, [sending]);
-
-  useEffect(() => {
-    playingMessageIdRef.current = playingMessageId;
-  }, [playingMessageId]);
 
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
-  }, [messages, open]);
+  }, [messages, open, sending]);
 
   useEffect(() => {
     if (!open) return;
@@ -201,19 +126,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
 
     return () => window.clearTimeout(timer);
   }, [open]);
-
-  useEffect(() => {
-    if (voicePhase !== "listening") {
-      setListeningSeconds(0);
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setListeningSeconds((previous) => previous + 1);
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [voicePhase]);
 
   useEffect(() => {
     const handleExternalOpen = (incoming: Event) => {
@@ -244,38 +156,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     };
   }, []);
 
-  const clearScheduledRecognitionStart = useCallback(() => {
-    if (recognitionStartTimerRef.current !== null) {
-      window.clearTimeout(recognitionStartTimerRef.current);
-      recognitionStartTimerRef.current = null;
-    }
-  }, []);
-
-  const rememberAudioUrl = useCallback((audioUrl: string) => {
-    ownedAudioUrlsRef.current.add(audioUrl);
-    return audioUrl;
-  }, []);
-
-  const stopPlayback = useCallback(() => {
-    playbackRunIdRef.current += 1;
-    playbackStopResolverRef.current?.();
-    playbackStopResolverRef.current = null;
-    playingMessageIdRef.current = null;
-
-    const audio = playbackAudioRef.current;
-    if (!audio) return;
-
-    audio.pause();
-    audio.currentTime = 0;
-    playbackAudioRef.current = null;
-    setPlayingMessageId(null);
-  }, []);
-
-  const revokeOwnedAudioUrls = useCallback(() => {
-    ownedAudioUrlsRef.current.forEach((audioUrl) => URL.revokeObjectURL(audioUrl));
-    ownedAudioUrlsRef.current.clear();
-  }, []);
-
   const addMessage = useCallback(
     (role: Role, text: string, extra?: Partial<Message>) => {
       const message: Message = { id: uid(), role, text, ...extra };
@@ -296,319 +176,27 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     );
   }, []);
 
-  const stopVoiceRecognition = useCallback(
-    (mode: "stop" | "abort" = "stop") => {
-      clearScheduledRecognitionStart();
-      recognitionActiveRef.current = false;
-      setLiveTranscript("");
-      setListeningSeconds(0);
-
-      const recognition = recognitionRef.current;
-      if (!recognition) return;
-
-      try {
-        if (mode === "abort") {
-          recognition.abort();
-        } else {
-          recognition.stop();
-        }
-      } catch {
-        // Ignore repeated stop/start attempts from browsers with strict state machines.
-      }
-    },
-    [clearScheduledRecognitionStart]
-  );
-
-  const scheduleVoiceRecognitionStart = useCallback(
-    (delay = 260) => {
-      if (typeof window === "undefined") return;
-
-      clearScheduledRecognitionStart();
-      recognitionStartTimerRef.current = window.setTimeout(() => {
-        recognitionStartTimerRef.current = null;
-        void startVoiceRecognitionRef.current?.();
-      }, delay);
-    },
-    [clearScheduledRecognitionStart]
-  );
-
-  const playAudioUrlForMessage = useCallback(
-    async (messageId: string, audioUrl: string, waitForEnd = false) => {
-      stopPlayback();
-
-      const runId = playbackRunIdRef.current;
-      const audio = new Audio(audioUrl);
-      playbackAudioRef.current = audio;
-      playingMessageIdRef.current = messageId;
-      setPlayingMessageId(messageId);
-
-      let resolveDone: (() => void) | null = null;
-      const donePromise = waitForEnd
-        ? new Promise<void>((resolve) => {
-            resolveDone = resolve;
-            playbackStopResolverRef.current = resolve;
-          })
-        : null;
-
-      const cleanup = () => {
-        if (playbackAudioRef.current === audio) {
-          playbackAudioRef.current = null;
-          playingMessageIdRef.current = null;
-          setPlayingMessageId(null);
-        }
-        if (playbackStopResolverRef.current === resolveDone) {
-          playbackStopResolverRef.current = null;
-        }
-        resolveDone?.();
-      };
-
-      audio.onended = cleanup;
-      audio.onerror = cleanup;
-
-      try {
-        await audio.play();
-        if (donePromise) {
-          await donePromise;
-          if (playbackRunIdRef.current !== runId) {
-            throw new Error(PLAYBACK_INTERRUPTED_ERROR);
-          }
-        }
-      } catch (error) {
-        cleanup();
-        throw error;
-      }
-    },
-    [stopPlayback]
-  );
-
-  const ensureMicrophoneReady = useCallback(async () => {
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices?.getUserMedia
-    ) {
-      throw new Error("Microphone access is not supported in this browser.");
-    }
-
-    if (!window.isSecureContext) {
-      throw new Error(
-        "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again."
-      );
-    }
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((track) => track.stop());
-  }, []);
-
-  const deactivateVoiceCall = useCallback(
-    (clearNotice = false) => {
-      desiredRecognitionStateRef.current = "off";
-      voiceModeRef.current = false;
-      setVoiceMode(false);
-      setVoicePhase("idle");
-      setLiveTranscript("");
-      setListeningSeconds(0);
-      stopVoiceRecognition("abort");
-      if (clearNotice) {
-        setComposerNotice(null);
-      }
-    },
-    [stopVoiceRecognition]
-  );
-
-  const activateVoiceCall = useCallback(async () => {
-    if (!isSpeechRecognitionSupported()) {
-      setComposerNotice(
-        "Hands-free voice call currently needs Chrome, Edge, or another browser with speech recognition."
-      );
-      return;
-    }
-
-    try {
-      await ensureMicrophoneReady();
-      const voiceAvailability = await getVoiceServiceAvailability();
-      if (!voiceAvailability.available) {
-        throw new Error(voiceAvailability.message);
-      }
-      stopPlayback();
-      setComposerNotice(null);
-      voiceModeRef.current = true;
-      setVoiceMode(true);
-      setVoicePhase("listening");
-      setLiveTranscript("");
-      desiredRecognitionStateRef.current = "listening";
-      scheduleVoiceRecognitionStart(80);
-    } catch (error) {
-      deactivateVoiceCall();
-      setComposerNotice(formatMicrophoneAccessError(error));
-    }
-  }, [
-    deactivateVoiceCall,
-    ensureMicrophoneReady,
-    scheduleVoiceRecognitionStart,
-    stopPlayback,
-  ]);
-
-  const startVoiceRecognition = useCallback(async () => {
-    if (
-      !voiceModeRef.current ||
-      desiredRecognitionStateRef.current !== "listening" ||
-      sendingRef.current ||
-      playingMessageIdRef.current ||
-      recognitionActiveRef.current
-    ) {
-      return;
-    }
-
-    const SpeechRecognition = getSpeechRecognitionConstructor();
-    if (!SpeechRecognition) {
-      deactivateVoiceCall();
-      setComposerNotice(
-        "Hands-free voice call currently needs Chrome, Edge, or another browser with speech recognition."
-      );
-      return;
-    }
-
-    const recognition = recognitionRef.current ?? new SpeechRecognition();
-    recognitionRef.current = recognition;
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = getPreferredRecognitionLanguage();
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      recognitionActiveRef.current = true;
-      setVoicePhase("listening");
-      setComposerNotice(null);
-    };
-
-    recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
-      let finalTranscript = "";
-      let interimTranscript = "";
-
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        const transcript = result[0]?.transcript?.trim();
-
-        if (!transcript) continue;
-
-        if (result.isFinal) {
-          finalTranscript = `${finalTranscript} ${transcript}`.trim();
-        } else {
-          interimTranscript = `${interimTranscript} ${transcript}`.trim();
-        }
-      }
-
-      setLiveTranscript(interimTranscript);
-
-      if (!finalTranscript) {
-        return;
-      }
-
-      desiredRecognitionStateRef.current = "paused";
-      recognitionActiveRef.current = false;
-      setVoicePhase("thinking");
-      setLiveTranscript("");
-
-      try {
-        recognition.stop();
-      } catch {
-        // Ignore browser state exceptions when a final result lands during teardown.
-      }
-
-      void submitTextMessageRef.current?.(finalTranscript, {
-        inputKind: "speech",
-        meta: "Voice call",
-        preferVoiceReply: true,
-      });
-    };
-
-    recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
-      recognitionActiveRef.current = false;
-      setListeningSeconds(0);
-
-      if (event.error === "aborted") {
-        return;
-      }
-
-      if (event.error === "no-speech") {
-        setLiveTranscript("");
-        return;
-      }
-
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        deactivateVoiceCall();
-      }
-
-      setComposerNotice(formatMicrophoneAccessError(event));
-    };
-
-    recognition.onend = () => {
-      recognitionActiveRef.current = false;
-      setListeningSeconds(0);
-
-      if (
-        voiceModeRef.current &&
-        desiredRecognitionStateRef.current === "listening" &&
-        !sendingRef.current &&
-        !playingMessageIdRef.current
-      ) {
-        scheduleVoiceRecognitionStart();
-        return;
-      }
-
-      if (desiredRecognitionStateRef.current === "off") {
-        setVoicePhase("idle");
-      }
-    };
-
-    try {
-      recognition.start();
-    } catch (error) {
-      const message = (error as Error).message.toLowerCase();
-      if (message.includes("already started")) {
-        return;
-      }
-
-      setComposerNotice(formatMicrophoneAccessError(error));
-    }
-  }, [deactivateVoiceCall, scheduleVoiceRecognitionStart]);
-
-  useEffect(() => {
-    startVoiceRecognitionRef.current = startVoiceRecognition;
-  }, [startVoiceRecognition]);
-
   const handleSpeakMessage = useCallback(
     async (message: Message) => {
       if (!message.text.trim()) return;
 
       if (playingMessageId === message.id) {
         stopPlayback();
-        if (voiceModeRef.current) {
-          desiredRecognitionStateRef.current = "listening";
-          scheduleVoiceRecognitionStart();
-        }
         return;
       }
 
-      const shouldResumeVoiceCall = voiceModeRef.current;
       setComposerNotice(null);
-
-      if (shouldResumeVoiceCall) {
-        desiredRecognitionStateRef.current = "paused";
-        stopVoiceRecognition();
-        setVoicePhase("speaking");
-      }
 
       try {
         if (message.audioUrls?.length) {
           for (const audioUrl of message.audioUrls) {
-            await playAudioUrlForMessage(message.id, audioUrl, shouldResumeVoiceCall);
+            await playAudioUrlForMessage(message.id, audioUrl, true);
           }
           return;
         }
 
         if (message.audioUrl) {
-          await playAudioUrlForMessage(message.id, message.audioUrl, shouldResumeVoiceCall);
+          await playAudioUrlForMessage(message.id, message.audioUrl, true);
           return;
         }
 
@@ -624,7 +212,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
           audioMimeType: spoken.audioMimeType,
         });
 
-        await playAudioUrlForMessage(message.id, audioUrl, shouldResumeVoiceCall);
+        await playAudioUrlForMessage(message.id, audioUrl, true);
       } catch (error) {
         if (!isPlaybackInterrupted(error)) {
           setComposerNotice(formatVoiceRequestError(error as Error));
@@ -633,120 +221,35 @@ export default function FloatingChat({ content }: FloatingChatProps) {
         setSynthesizingMessageId((previous) =>
           previous === message.id ? null : previous
         );
-
-        if (shouldResumeVoiceCall && voiceModeRef.current) {
-          desiredRecognitionStateRef.current = "listening";
-          scheduleVoiceRecognitionStart();
-        } else {
-          setVoicePhase("idle");
-        }
       }
     },
     [
       context,
-      playingMessageId,
       playAudioUrlForMessage,
+      playingMessageId,
       rememberAudioUrl,
-      scheduleVoiceRecognitionStart,
       sessionId,
       stopPlayback,
-      stopVoiceRecognition,
       updateMessage,
     ]
   );
 
   const submitTextMessage = useCallback(
-    async (rawText: string, options: SubmitTextMessageOptions = {}) => {
+    async (rawText: string) => {
       const text = rawText.trim();
       if (!text || sendingRef.current) return;
 
-      const inputKind = options.inputKind ?? "text";
-      const shouldUseVoiceReply = options.preferVoiceReply ?? voiceModeRef.current;
-
-      if (voiceModeRef.current) {
-        desiredRecognitionStateRef.current = "paused";
-        stopVoiceRecognition();
-      }
-
-      if (inputKind === "text") {
-        setInput("");
-        resetTextareaHeight(inputRef.current);
-      }
-
+      setInput("");
+      resetTextareaHeight(inputRef.current);
       setComposerNotice(null);
       sendingRef.current = true;
       setSending(true);
       stopPlayback();
       addMessage("user", text, {
-        inputKind,
-        meta: options.meta,
+        inputKind: "text",
       });
 
       try {
-        if (shouldUseVoiceReply) {
-          let assistantId: string | null = null;
-          const audioUrls: string[] = [];
-          let answerResolvedContext = context;
-          setVoicePhase("thinking");
-
-          await streamTextToSpeech(text, { context, sessionId }, async (event) => {
-            if (event.type === "answer") {
-              answerResolvedContext = event.resolvedContext;
-              assistantId = addMessage("assistant", event.answer, {
-                context: event.resolvedContext,
-                audioUrls,
-                meta: buildMetaLabel({
-                  requestedContext: context,
-                  resolvedContext: event.resolvedContext,
-                  transport: inputKind === "speech" ? "Voice call" : "Streaming speech",
-                  chunksValidated: event.chunksValidated,
-                  chunksRetrieved: event.chunksRetrieved,
-                }),
-              });
-              return;
-            }
-
-            if (event.type === "audio") {
-              const ownedAudioUrl = rememberAudioUrl(event.audioUrl);
-              audioUrls.push(ownedAudioUrl);
-
-              if (!assistantId) {
-                return;
-              }
-
-              updateMessage(assistantId, {
-                audioUrls: [...audioUrls],
-                audioMimeType: event.audioMimeType,
-              });
-
-              setVoicePhase("speaking");
-              await playAudioUrlForMessage(assistantId, ownedAudioUrl, true);
-              return;
-            }
-
-            if (event.type === "done" && event.audioCount === 0) {
-              const unavailableMessage =
-                "Patrick voice is temporarily unavailable right now. The text answer arrived without audio.";
-              setComposerNotice(unavailableMessage);
-
-              if (assistantId) {
-                updateMessage(assistantId, {
-                  meta: buildMetaLabel({
-                    requestedContext: context,
-                    resolvedContext: answerResolvedContext,
-                    transport:
-                      inputKind === "speech"
-                        ? "Voice call text-only"
-                        : "Text response only",
-                  }),
-                });
-              }
-            }
-          });
-
-          return;
-        }
-
         const result = await sendTextToText(text, { context, sessionId });
 
         addMessage("assistant", result.answer, {
@@ -754,7 +257,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
           meta: buildMetaLabel({
             requestedContext: context,
             resolvedContext: result.resolvedContext,
-            transport: inputKind === "speech" ? "Voice call" : "Text to text",
+            transport: "Text to text",
             chunksValidated: result.chunksValidated,
             chunksRetrieved: result.chunksRetrieved,
           }),
@@ -769,74 +272,22 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       } finally {
         sendingRef.current = false;
         setSending(false);
-
-        if (voiceModeRef.current) {
-          desiredRecognitionStateRef.current = "listening";
-          scheduleVoiceRecognitionStart();
-        } else {
-          setVoicePhase("idle");
-        }
       }
     },
-    [
-      addMessage,
-      context,
-      playAudioUrlForMessage,
-      rememberAudioUrl,
-      scheduleVoiceRecognitionStart,
-      sessionId,
-      stopPlayback,
-      stopVoiceRecognition,
-      updateMessage,
-    ]
+    [addMessage, context, sessionId, stopPlayback]
   );
 
-  useEffect(() => {
-    submitTextMessageRef.current = submitTextMessage;
-  }, [submitTextMessage]);
-
   const clearChat = useCallback(() => {
-    deactivateVoiceCall(true);
     stopPlayback();
     revokeOwnedAudioUrls();
     setMessages([createClearedMessage(undefined, content.clearedMessage)]);
     setInput("");
     setHasUnread(false);
+    setComposerNotice(null);
     setSynthesizingMessageId(null);
     resetTextareaHeight(inputRef.current);
     inputRef.current?.focus();
-  }, [
-    content.clearedMessage,
-    deactivateVoiceCall,
-    revokeOwnedAudioUrls,
-    stopPlayback,
-  ]);
-
-  const toggleVoiceCall = useCallback(() => {
-    if (voiceMode) {
-      deactivateVoiceCall(true);
-      stopPlayback();
-      return;
-    }
-
-    void activateVoiceCall();
-  }, [activateVoiceCall, deactivateVoiceCall, stopPlayback, voiceMode]);
-
-  useEffect(() => {
-    if (!open && voiceModeRef.current) {
-      deactivateVoiceCall();
-      stopPlayback();
-    }
-  }, [deactivateVoiceCall, open, stopPlayback]);
-
-  useEffect(() => {
-    return () => {
-      deactivateVoiceCall();
-      stopPlayback();
-      revokeOwnedAudioUrls();
-      recognitionRef.current = null;
-    };
-  }, [deactivateVoiceCall, revokeOwnedAudioUrls, stopPlayback]);
+  }, [content.clearedMessage, revokeOwnedAudioUrls, stopPlayback]);
 
   const handleSend = useCallback(async () => {
     await submitTextMessage(input);
@@ -853,28 +304,16 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   );
 
   const showQuickPrompts = messages.length <= 1 && !sending;
-  const statusLabel = voiceMode
-    ? voicePhase === "listening"
-      ? "Listening"
-      : voicePhase === "thinking"
-        ? "Thinking"
-        : voicePhase === "speaking"
-          ? "Speaking"
-          : "Voice call"
-    : content.readyLabel;
-  const voiceActivityLabel = voiceMode
-    ? voicePhase === "listening"
-      ? `Listening ${formatRecordingTime(listeningSeconds)}`
-      : voicePhase === "thinking"
-        ? "Patrick is thinking..."
-        : voicePhase === "speaking"
-          ? "Patrick is speaking..."
-          : "Voice call ready"
-    : sending
-      ? "Thinking..."
-      : playingMessageId
-        ? "Playing Patrick's voice..."
-        : "Text and voice ready";
+  const statusLabel = sending
+    ? "Thinking"
+    : playingMessageId
+      ? "Speaking"
+      : content.readyLabel;
+  const activityLabel = sending
+    ? "Patrick is thinking..."
+    : playingMessageId
+      ? "Playing Patrick's voice..."
+      : "Text chat ready";
 
   if (pathname?.startsWith("/admin")) {
     return null;
@@ -938,20 +377,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
             <div className="flex items-center gap-1">
               <motion.button
                 whileTap={{ scale: 0.94 }}
-                onClick={toggleVoiceCall}
-                className={`chat-toolbar-button h-10 px-3 ${
-                  voiceMode ? "chat-toolbar-button-active" : ""
-                }`}
-                aria-label={voiceMode ? "End voice call" : "Start voice call"}
-                aria-pressed={voiceMode}
-              >
-                <PhoneCall className="h-4 w-4" />
-                <span className="hidden text-xs font-medium sm:inline">
-                  {voiceMode ? "On call" : "Call"}
-                </span>
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.94 }}
                 onClick={() => setShowSettings((previous) => !previous)}
                 className="chat-toolbar-button h-10 w-10"
                 aria-label="Toggle chat settings"
@@ -1009,18 +434,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
 
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                     <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
-                      Voice features
-                    </label>
-                    <p className="text-sm leading-6 text-white/58">
-                      Voice call mode listens hands-free in the browser, turns
-                      your speech into text, then streams Patrick&apos;s answer and
-                      MP3 voice reply sentence by sentence from the production AI
-                      endpoint using Patrick&apos;s cached speaker profile.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">
                       Session
                     </label>
                     <input
@@ -1056,56 +469,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                 ))}
               </div>
             )}
-
-            <AnimatePresence initial={false}>
-              {voiceMode && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ duration: 0.22, ease: "easeOut" }}
-                  className="chat-voice-card mb-5 rounded-[26px] p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`chat-voice-orb ${
-                        voicePhase === "listening" ? "chat-voice-orb-recording" : ""
-                      }`}
-                    >
-                      <Mic className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-white">
-                        Voice call with Patrick AI
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-white/52">
-                        {voiceActivityLabel}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-3">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-white/35">
-                      Live transcript
-                    </p>
-                    <p className="mt-2 min-h-[2.75rem] text-sm leading-6 text-white/82">
-                      {liveTranscript ||
-                        "Speak naturally. Patrick will answer in voice, then the mic will reopen automatically."}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={toggleVoiceCall}
-                      className="chat-voice-primary-button"
-                    >
-                      End call
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
             <div className="space-y-4 pb-5">
               <AnimatePresence initial={false}>
@@ -1149,12 +512,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                             }`}
                           >
                             <span>{isUser ? "You" : "Assistant"}</span>
-                            {message.inputKind === "speech" && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-white/6 px-2 py-1 text-[9px] tracking-[0.18em] text-white/42">
-                                <Mic className="h-2.5 w-2.5" />
-                                Voice
-                              </span>
-                            )}
                           </div>
 
                           <div
@@ -1170,9 +527,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                           </div>
 
                           {canSpeakAssistantMessage && (
-                            <div
-                              className={`mt-2 flex ${isUser ? "justify-end" : "justify-start"}`}
-                            >
+                            <div className="mt-2 flex justify-start">
                               <button
                                 onClick={() => {
                                   void handleSpeakMessage(message);
@@ -1201,11 +556,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                           )}
 
                           {message.meta && (
-                            <div
-                              className={`mt-2 flex flex-wrap gap-2 ${
-                                isUser ? "justify-end" : "justify-start"
-                              }`}
-                            >
+                            <div className="mt-2 flex flex-wrap gap-2">
                               {renderMeta(message.meta)}
                             </div>
                           )}
@@ -1290,7 +641,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                 >
                   {composerNotice ?? COMPOSER_HINT}
                 </p>
-                <p className="text-[11px] text-white/40">{voiceActivityLabel}</p>
+                <p className="text-[11px] text-white/40">{activityLabel}</p>
               </div>
             </div>
           </div>

@@ -62,6 +62,15 @@ YouTube URLs are also enriched automatically:
 - The music widget prefetches YouTube metadata.
 - Queue titles update from YouTube when metadata is available.
 
+## Voice Widget Content
+
+The separate hands-free voice widget is configured through the `voiceChat` section.
+
+- `voiceChat.widgetOpenLabel` controls the small floating icon label.
+- `voiceChat.panelTitle` and `voiceChat.panelDescription` drive the expanded card copy.
+- Status labels such as `listeningLabel` and `speakingLabel` are editable in JSON.
+- Transcript and history copy also live in JSON, so the admin can tune the voice UX without touching component code.
+
 ## Resume Drive URL
 
 The resume section now uses a full Google Drive URL instead of a raw file ID.

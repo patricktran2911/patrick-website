@@ -1,68 +1,77 @@
 # AI Chat Integration
 
-This website chat now uses the newer AI endpoints with a split transport model:
+The website now exposes two separate floating AI experiences instead of mixing
+voice state into the text widget:
 
-- Local browser requests use clean same-origin `/api/ai/...` routes first. On
-  `patrickcs-web.com`, the browser calls
-  `https://ai-dev.patrickcs-web.com/api/v1/ai/...` directly because the current
-  Amplify production hosting returns `405` for Next API proxy routes.
+- `FloatingChat.tsx`
+  Text-first chatbot for typed questions and optional per-message playback.
+- `FloatingVoiceChat.tsx`
+  Separate hands-free voice call widget mounted above the text chatbot.
+
+Both widgets share the same floating shell and audio playback plumbing, but
+their interaction models are intentionally separate.
+
+## Endpoint usage
+
 - `POST /api/ai/text-to-text`
-  Used for typed questions in the floating chat.
+  Used by the text chatbot for normal typed questions.
 - `POST /api/ai/speech`
-  Used when the user taps the speaker button on an assistant message.
-- `POST /api/ai/text-to-speech`
-  Legacy full-audio JSON flow.
+  Used when the user taps play on an assistant message inside the text chat.
 - `POST /api/ai/text-to-speech/stream`
-  Used when voice mode is active. It streams the answer first, then one MP3
-  payload per sentence.
+  Used only by the separate voice widget.
+
+The live voice stream contract is newline-delimited JSON and currently looks
+like this:
+
+- `meta`
+  Announces resolved context and streaming mode.
+- `answer_delta`
+  Appends text into the assistant transcript as it is generated.
+- `sentence`
+  Announces sentence boundaries and indexes.
+- `audio`
+  Carries one MP3 chunk per sentence in `audio.base64`.
+- `done`
+  Finalizes the assistant answer text for the turn.
 
 ## Reusable structure
 
-- `src/reusable-components/FloatingChat.tsx`
-  Owns the floating chat experience, message rendering, browser speech-recognition lifecycle, and playback UX.
+- `src/reusable-components/floating/FloatingWidgetFrame.tsx`
+  Shared expand/collapse shell for floating widgets.
+- `src/reusable-components/chat/useAudioPlayback.ts`
+  Shared audio URL tracking, playback control, and cleanup.
 - `src/reusable-components/chat/chatApi.ts`
-  Centralizes all client-side AI endpoint calls so transport logic is not duplicated in the UI.
-- `src/app/api/ai/[...path]/route.ts`
-  Proxies local/development website-origin requests to the Hetzner AI API and
-  keeps optional API keys server-side when that runtime path is available.
+  Shared client-side transport layer for text and voice endpoints.
 - `src/reusable-components/chat/chatAudio.ts`
-  Holds small audio helpers such as browser speech-recognition types, support checks, and timing helpers.
+  Browser speech-recognition helpers and recognition-error formatting support.
 - `src/reusable-components/chat/chatShared.ts`
-  Shared chat types, welcome helpers, context options, and textarea utilities.
+  Shared chat types, context labels, meta-label helpers, and textarea utilities.
 
 ## Behavior rules
 
-- Typed input sends to `text-to-text` and renders a text answer in chat.
-- Typed input in voice mode sends to `text-to-speech/stream`, renders the
-  answer, and starts playing each sentence as soon as that sentence audio is
-  generated.
-- Hands-free voice call mode uses browser speech recognition for user speech,
-  sends the transcript through `text-to-speech/stream`, and then resumes
-  listening after Patrick's audio reply finishes.
-- If the stream ends without any audio chunks, the UI keeps the text answer,
-  surfaces a Patrick-voice availability notice, and avoids feeding the browser
-  an empty audio source.
-- Assistant replies can be spoken on demand through the `speech` endpoint.
+- The text chatbot stays text-first. It no longer owns the hands-free voice
+  loop.
+- The voice widget opens from its own floating icon above the text chatbot.
+- Voice turns use browser speech recognition for the user's speech, then call
+  `text-to-speech/stream`.
+- `answer_delta` events append into the transcript live.
+- `audio` events are converted from base64 into MP3 object URLs, queued by
+  `index`, and played in order as each sentence arrives.
+- If the stream finishes without audio, the transcript remains visible and the
+  UI shows a Patrick-voice unavailable notice instead of trying to play a bad
+  source.
+- After Patrick finishes speaking, the mic automatically reopens for the next
+  turn.
 
 ## Notes
 
-- `chatApi.ts` is intentionally tolerant of plain-text or JSON text answers so backend response formatting can evolve without breaking the UI.
-- The browser client calls the Hetzner AI API base URL on production and does
-  not call Self-Host or CosyVoice services directly.
-- The backend now keeps Patrick enrolled as a cached CosyVoice speaker profile,
-  so normal FE voice generation does not need to send a reference WAV or
-  `voice_reference_text` on each request.
-- `voice_reference_text` is now mainly an enrollment or refresh concern on the
-  backend side rather than part of the normal FE runtime path.
-- Set `AI_API_KEY` or `APP_API_KEY` on the website server if the Hetzner backend
-  enables API-key auth. Avoid exposing API keys with `NEXT_PUBLIC_` variables.
-- Optional public tuning variables: set `NEXT_PUBLIC_AI_VOICE_SPEED` and
-  `NEXT_PUBLIC_AI_VOICE_INSTRUCTIONS` to adjust the speed/style sent with every
-  browser voice request. Set `NEXT_PUBLIC_AI_VOICE_INPUT_LANG` to override the
-  browser speech-recognition language. The default speed is `0.86`.
-- Voice call activation now preflights `/api/ai/voice/local-health` so the UI
-  can stop early with a clear message when Patrick's backend voice service is
-  unavailable.
-- Voice playback intentionally does not fall back to the browser speech engine, because that would use the device voice instead of Patrick's backend voice.
-- The current voice call is hands-free and turn-based, but it is still not true full-duplex realtime audio. ChatGPT-style live voice with simultaneous streaming both directions will need a continuous transport such as WebSocket or WebRTC on the AI backend.
-- Object URLs created for generated audio are tracked and revoked when the chat clears or unmounts to avoid leaking browser memory.
+- On production, the browser calls the Hetzner AI endpoint directly because the
+  current Amplify hosting path does not reliably proxy streaming AI requests.
+- Voice activation still preflights `/api/ai/voice/local-health` before opening
+  the hands-free loop.
+- Patrick voice playback intentionally does not fall back to the browser speech
+  engine, because that would use the device voice instead of Patrick's backend
+  voice.
+- The current voice call is hands-free and turn-based, but it is not true
+  full-duplex realtime audio. Simultaneous live input and output will still
+  need a continuous backend transport such as WebSocket or WebRTC.
