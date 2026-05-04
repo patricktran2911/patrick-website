@@ -2,16 +2,17 @@
 
 This website chat now uses the newer AI endpoints with a split transport model:
 
-- Browser requests go to same-origin `/api/ai/...` routes first. Those routes
-  proxy to `https://ai-dev.patrickcs-web.com/...` server-side to avoid browser
-  CORS failures.
-- `POST /api/v1/ai/text-to-text`
+- Browser requests use clean same-origin `/api/ai/...` routes first. For
+  example, `/api/ai/speech-to-speech` proxies to
+  `https://ai-dev.patrickcs-web.com/api/v1/ai/speech-to-speech` server-side to
+  avoid browser CORS failures.
+- `POST /api/ai/text-to-text`
   Used for typed questions in the floating chat.
-- `POST /api/v1/ai/speech`
+- `POST /api/ai/speech`
   Used when the user taps the speaker button on an assistant message.
-- `POST /api/v1/ai/text-to-speech`
+- `POST /api/ai/text-to-speech`
   Used when voice mode is active and the user sends a typed prompt.
-- `POST /api/v1/ai/speech-to-speech`
+- `POST /api/ai/speech-to-speech`
   Used when the user records a voice question from the chat composer.
 
 ## Reusable structure

@@ -192,14 +192,14 @@ export async function sendTextToText(
   text: string,
   options: ChatRequestOptions
 ): Promise<TextToTextResult> {
-  const primary = await requestTextPayload("/api/v1/ai/text-to-text", text, options);
+  const primary = await requestTextPayload("/text-to-text", text, options);
 
   if (primary.response.ok) {
     return buildTextToTextResult(primary.payload, options);
   }
 
   if (primary.response.status === 404) {
-    const legacy = await requestTextPayload("/api/v1/ai/chat", text, options);
+    const legacy = await requestTextPayload("/chat", text, options);
     if (!legacy.response.ok) {
       throw new Error(extractErrorMessage(legacy.payload.data, legacy.response.status));
     }
@@ -214,7 +214,7 @@ export async function sendSpeech(
   text: string,
   _options?: ChatRequestOptions
 ): Promise<SpeechAudioResult> {
-  const response = await fetch(`${BASE_URL}/api/v1/ai/speech`, {
+  const response = await fetch(`${BASE_URL}/speech`, {
     method: "POST",
     headers: getJsonHeaders(),
     body: JSON.stringify(buildSpeechPayload(text)),
@@ -236,7 +236,7 @@ export async function sendTextToSpeech(
   text: string,
   options: ChatRequestOptions
 ): Promise<TextToSpeechResult> {
-  const response = await fetch(`${BASE_URL}/api/v1/ai/text-to-speech`, {
+  const response = await fetch(`${BASE_URL}/text-to-speech`, {
     method: "POST",
     headers: getJsonHeaders(),
     body: JSON.stringify({
@@ -313,7 +313,7 @@ export async function sendSpeechToSpeech(
     formData.append("session_id", options.sessionId);
   }
 
-  const response = await fetch(`${BASE_URL}/api/v1/ai/speech-to-speech`, {
+  const response = await fetch(`${BASE_URL}/speech-to-speech`, {
     method: "POST",
     body: formData,
   });

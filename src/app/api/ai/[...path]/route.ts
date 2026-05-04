@@ -11,6 +11,10 @@ const SERVER_API_KEY = (
   ""
 ).trim();
 
+const AI_PATH_PREFIX = ["api", "v1", "ai"];
+const CORE_PATH_PREFIX = ["api", "v1"];
+const CORE_ENDPOINTS = new Set(["health", "info"]);
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -22,13 +26,26 @@ interface RouteContext {
 
 function buildTargetUrl(path: string[], requestUrl: string) {
   const incomingUrl = new URL(requestUrl);
-  const targetUrl = new URL(`${UPSTREAM_AI_BASE_URL}/${path.join("/")}`);
+  const upstreamPath = normalizeUpstreamPath(path);
+  const targetUrl = new URL(`${UPSTREAM_AI_BASE_URL}/${upstreamPath.join("/")}`);
 
   incomingUrl.searchParams.forEach((value, key) => {
     targetUrl.searchParams.append(key, value);
   });
 
   return targetUrl;
+}
+
+function normalizeUpstreamPath(path: string[]) {
+  if (path[0] === "api") {
+    return path;
+  }
+
+  if (CORE_ENDPOINTS.has(path[0])) {
+    return [...CORE_PATH_PREFIX, ...path];
+  }
+
+  return [...AI_PATH_PREFIX, ...path];
 }
 
 function buildUpstreamHeaders(request: Request) {
