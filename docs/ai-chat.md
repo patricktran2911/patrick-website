@@ -2,10 +2,10 @@
 
 This website chat now uses the newer AI endpoints with a split transport model:
 
-- Browser requests use clean same-origin `/api/ai/...` routes first. For
-  example, `/api/ai/speech-to-speech` proxies to
-  `https://ai-dev.patrickcs-web.com/api/v1/ai/speech-to-speech` server-side to
-  avoid browser CORS failures.
+- Local browser requests use clean same-origin `/api/ai/...` routes first. On
+  `patrickcs-web.com`, the browser calls
+  `https://ai-dev.patrickcs-web.com/api/v1/ai/...` directly because the current
+  Amplify production hosting returns `405` for Next API proxy routes.
 - `POST /api/ai/text-to-text`
   Used for typed questions in the floating chat.
 - `POST /api/ai/speech`
@@ -22,8 +22,8 @@ This website chat now uses the newer AI endpoints with a split transport model:
 - `src/reusable-components/chat/chatApi.ts`
   Centralizes all client-side AI endpoint calls so transport logic is not duplicated in the UI.
 - `src/app/api/ai/[...path]/route.ts`
-  Proxies website-origin requests to the Hetzner AI API and keeps optional API
-  keys server-side.
+  Proxies local/development website-origin requests to the Hetzner AI API and
+  keeps optional API keys server-side when that runtime path is available.
 - `src/reusable-components/chat/chatAudio.ts`
   Holds small audio helpers such as recorder MIME selection and recording time formatting.
 - `src/reusable-components/chat/chatShared.ts`
@@ -46,9 +46,8 @@ This website chat now uses the newer AI endpoints with a split transport model:
 ## Notes
 
 - `chatApi.ts` is intentionally tolerant of plain-text or JSON text answers so backend response formatting can evolve without breaking the UI.
-- The browser client only calls the website's same-origin proxy. The proxy only
-  calls the Hetzner AI API base URL; it does not call Self-Host or CosyVoice
-  services directly.
+- The browser client calls the Hetzner AI API base URL on production and does
+  not call Self-Host or CosyVoice services directly.
 - Set `AI_API_KEY` or `APP_API_KEY` on the website server if the Hetzner backend
   enables API-key auth. Avoid exposing API keys with `NEXT_PUBLIC_` variables.
 - Optional public tuning variables: set `NEXT_PUBLIC_AI_VOICE_SPEED` and

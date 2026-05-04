@@ -1,8 +1,24 @@
 "use client";
 
-export const BASE_URL = (
-  process.env.NEXT_PUBLIC_AI_PROXY_URL ?? "/api/ai"
+const DIRECT_AI_BASE_URL = (
+  process.env.NEXT_PUBLIC_AI_DIRECT_URL ??
+  "https://ai-dev.patrickcs-web.com/api/v1/ai"
 ).replace(/\/$/, "");
+
+function resolveBaseUrl() {
+  const configuredProxy = process.env.NEXT_PUBLIC_AI_PROXY_URL;
+  if (configuredProxy) {
+    return configuredProxy.replace(/\/$/, "");
+  }
+
+  const hostname =
+    typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+
+  return isLocalhost ? "/api/ai" : DIRECT_AI_BASE_URL;
+}
+
+export const BASE_URL = resolveBaseUrl();
 export const AI_USER_ID = process.env.NEXT_PUBLIC_AI_USER_ID ?? "patrick";
 
 export type Role = "user" | "assistant";
