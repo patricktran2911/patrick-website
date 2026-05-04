@@ -12,7 +12,6 @@ import {
   Send,
   Settings2,
   Sparkles,
-  Square,
   Trash2,
   Volume2,
   X,
@@ -23,10 +22,11 @@ import {
   CONTEXT_OPTIONS,
   createClearedMessage,
   createWelcomeMessage,
-  Message,
+  type InputKind,
+  type Message,
   resetTextareaHeight,
   resizeTextarea,
-  Role,
+  type Role,
   splitMetaLabel,
   uid,
 } from "@/reusable-components/chat/chatShared";
@@ -34,22 +34,38 @@ import FloatingWidgetFrame from "@/reusable-components/floating/FloatingWidgetFr
 import type { ChatContent } from "@/lib/site-content-schema";
 import {
   sendSpeech,
-  sendSpeechToSpeech,
   sendTextToText,
   streamTextToSpeech,
 } from "@/reusable-components/chat/chatApi";
 import {
+  type BrowserSpeechRecognition,
+  type BrowserSpeechRecognitionErrorEvent,
+  type BrowserSpeechRecognitionEvent,
   formatRecordingTime,
-  getPreferredRecorderMimeType,
+  getPreferredRecognitionLanguage,
+  getSpeechRecognitionConstructor,
+  getSpeechRecognitionErrorMessage,
+  isSpeechRecognitionSupported,
 } from "@/reusable-components/chat/chatAudio";
 
 type ChatOpenDetail = {
   prompt?: string;
 };
 
+type VoicePhase = "idle" | "listening" | "thinking" | "speaking";
+type RecognitionDesiredState = "off" | "listening" | "paused";
+
 interface FloatingChatProps {
   content: ChatContent;
 }
+
+interface SubmitTextMessageOptions {
+  inputKind?: InputKind;
+  meta?: string;
+  preferVoiceReply?: boolean;
+}
+
+const PLAYBACK_INTERRUPTED_ERROR = "PLAYBACK_INTERRUPTED";
 
 function renderMeta(meta?: string) {
   if (!meta) return null;
@@ -69,9 +85,14 @@ function formatVoiceRequestError(error: Error) {
   return error.message;
 }
 
-function formatMicrophoneError(error: unknown) {
+function formatMicrophoneAccessError(error: unknown) {
   if (typeof window !== "undefined" && !window.isSecureContext) {
     return "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again.";
+  }
+
+  const recognitionMessage = getSpeechRecognitionErrorMessage(error);
+  if (recognitionMessage) {
+    return recognitionMessage;
   }
 
   if (error instanceof DOMException) {
@@ -91,6 +112,10 @@ function formatMicrophoneError(error: unknown) {
   return (error as Error)?.message || "Unable to access the microphone.";
 }
 
+function isPlaybackInterrupted(error: unknown) {
+  return error instanceof Error && error.message === PLAYBACK_INTERRUPTED_ERROR;
+}
+
 export default function FloatingChat({ content }: FloatingChatProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -103,29 +128,50 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   const [sessionId, setSessionId] = useState(`session-${uid()}`);
   const [showSettings, setShowSettings] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(
     null
   );
   const [composerNotice, setComposerNotice] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
+  const [listeningSeconds, setListeningSeconds] = useState(0);
+  const [liveTranscript, setLiveTranscript] = useState("");
 
   const openRef = useRef(open);
+  const voiceModeRef = useRef(voiceMode);
+  const sendingRef = useRef(sending);
+  const playingMessageIdRef = useRef<string | null>(playingMessageId);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const recorderChunksRef = useRef<Blob[]>([]);
-  const recorderStreamRef = useRef<MediaStream | null>(null);
-  const shouldSubmitRecordingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ownedAudioUrlsRef = useRef<Set<string>>(new Set());
   const playbackStopResolverRef = useRef<(() => void) | null>(null);
+  const playbackRunIdRef = useRef(0);
+  const ownedAudioUrlsRef = useRef<Set<string>>(new Set());
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const recognitionActiveRef = useRef(false);
+  const recognitionStartTimerRef = useRef<number | null>(null);
+  const desiredRecognitionStateRef = useRef<RecognitionDesiredState>("off");
+  const submitTextMessageRef = useRef<
+    ((text: string, options?: SubmitTextMessageOptions) => Promise<void>) | null
+  >(null);
+  const startVoiceRecognitionRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+
+  useEffect(() => {
+    voiceModeRef.current = voiceMode;
+  }, [voiceMode]);
+
+  useEffect(() => {
+    sendingRef.current = sending;
+  }, [sending]);
+
+  useEffect(() => {
+    playingMessageIdRef.current = playingMessageId;
+  }, [playingMessageId]);
 
   useEffect(() => {
     if (chatRef.current) {
@@ -139,21 +185,26 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     setHasUnread(false);
     const timer = window.setTimeout(() => {
       inputRef.current?.focus();
-      if (inputRef.current) resizeTextarea(inputRef.current, 150);
+      if (inputRef.current) {
+        resizeTextarea(inputRef.current, 150);
+      }
     }, 220);
 
     return () => window.clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {
-    if (!recording) return;
+    if (voicePhase !== "listening") {
+      setListeningSeconds(0);
+      return;
+    }
 
     const interval = window.setInterval(() => {
-      setRecordingSeconds((previous) => previous + 1);
+      setListeningSeconds((previous) => previous + 1);
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [recording]);
+  }, [voicePhase]);
 
   useEffect(() => {
     const handleExternalOpen = (incoming: Event) => {
@@ -184,14 +235,23 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     };
   }, []);
 
+  const clearScheduledRecognitionStart = useCallback(() => {
+    if (recognitionStartTimerRef.current !== null) {
+      window.clearTimeout(recognitionStartTimerRef.current);
+      recognitionStartTimerRef.current = null;
+    }
+  }, []);
+
   const rememberAudioUrl = useCallback((audioUrl: string) => {
     ownedAudioUrlsRef.current.add(audioUrl);
     return audioUrl;
   }, []);
 
   const stopPlayback = useCallback(() => {
+    playbackRunIdRef.current += 1;
     playbackStopResolverRef.current?.();
     playbackStopResolverRef.current = null;
+    playingMessageIdRef.current = null;
 
     const audio = playbackAudioRef.current;
     if (!audio) return;
@@ -227,36 +287,52 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     );
   }, []);
 
-  const stopRecorderStream = useCallback(() => {
-    recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
-    recorderStreamRef.current = null;
-  }, []);
+  const stopVoiceRecognition = useCallback(
+    (mode: "stop" | "abort" = "stop") => {
+      clearScheduledRecognitionStart();
+      recognitionActiveRef.current = false;
+      setLiveTranscript("");
+      setListeningSeconds(0);
 
-  const abortRecording = useCallback(() => {
-    if (!recorderRef.current) return;
+      const recognition = recognitionRef.current;
+      if (!recognition) return;
 
-    shouldSubmitRecordingRef.current = false;
-    setRecording(false);
-    setRecordingSeconds(0);
-    recorderRef.current.stop();
-  }, []);
+      try {
+        if (mode === "abort") {
+          recognition.abort();
+        } else {
+          recognition.stop();
+        }
+      } catch {
+        // Ignore repeated stop/start attempts from browsers with strict state machines.
+      }
+    },
+    [clearScheduledRecognitionStart]
+  );
 
-  const toggleVoiceMode = useCallback(() => {
-    if (recording) {
-      abortRecording();
-    }
+  const scheduleVoiceRecognitionStart = useCallback(
+    (delay = 260) => {
+      if (typeof window === "undefined") return;
 
-    setVoiceMode((previous) => !previous);
-    setComposerNotice(null);
-  }, [abortRecording, recording]);
+      clearScheduledRecognitionStart();
+      recognitionStartTimerRef.current = window.setTimeout(() => {
+        recognitionStartTimerRef.current = null;
+        void startVoiceRecognitionRef.current?.();
+      }, delay);
+    },
+    [clearScheduledRecognitionStart]
+  );
 
   const playAudioUrlForMessage = useCallback(
     async (messageId: string, audioUrl: string, waitForEnd = false) => {
       stopPlayback();
 
+      const runId = playbackRunIdRef.current;
       const audio = new Audio(audioUrl);
       playbackAudioRef.current = audio;
+      playingMessageIdRef.current = messageId;
       setPlayingMessageId(messageId);
+
       let resolveDone: (() => void) | null = null;
       const donePromise = waitForEnd
         ? new Promise<void>((resolve) => {
@@ -268,6 +344,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       const cleanup = () => {
         if (playbackAudioRef.current === audio) {
           playbackAudioRef.current = null;
+          playingMessageIdRef.current = null;
           setPlayingMessageId(null);
         }
         if (playbackStopResolverRef.current === resolveDone) {
@@ -283,6 +360,9 @@ export default function FloatingChat({ content }: FloatingChatProps) {
         await audio.play();
         if (donePromise) {
           await donePromise;
+          if (playbackRunIdRef.current !== runId) {
+            throw new Error(PLAYBACK_INTERRUPTED_ERROR);
+          }
         }
       } catch (error) {
         cleanup();
@@ -292,26 +372,230 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     [stopPlayback]
   );
 
+  const ensureMicrophoneReady = useCallback(async () => {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      throw new Error("Microphone access is not supported in this browser.");
+    }
+
+    if (!window.isSecureContext) {
+      throw new Error(
+        "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again."
+      );
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const deactivateVoiceCall = useCallback(
+    (clearNotice = false) => {
+      desiredRecognitionStateRef.current = "off";
+      voiceModeRef.current = false;
+      setVoiceMode(false);
+      setVoicePhase("idle");
+      setLiveTranscript("");
+      setListeningSeconds(0);
+      stopVoiceRecognition("abort");
+      if (clearNotice) {
+        setComposerNotice(null);
+      }
+    },
+    [stopVoiceRecognition]
+  );
+
+  const activateVoiceCall = useCallback(async () => {
+    if (!isSpeechRecognitionSupported()) {
+      setComposerNotice(
+        "Hands-free voice call currently needs Chrome, Edge, or another browser with speech recognition."
+      );
+      return;
+    }
+
+    try {
+      await ensureMicrophoneReady();
+      stopPlayback();
+      setComposerNotice(null);
+      voiceModeRef.current = true;
+      setVoiceMode(true);
+      setVoicePhase("listening");
+      setLiveTranscript("");
+      desiredRecognitionStateRef.current = "listening";
+      scheduleVoiceRecognitionStart(80);
+    } catch (error) {
+      deactivateVoiceCall();
+      setComposerNotice(formatMicrophoneAccessError(error));
+    }
+  }, [
+    deactivateVoiceCall,
+    ensureMicrophoneReady,
+    scheduleVoiceRecognitionStart,
+    stopPlayback,
+  ]);
+
+  const startVoiceRecognition = useCallback(async () => {
+    if (
+      !voiceModeRef.current ||
+      desiredRecognitionStateRef.current !== "listening" ||
+      sendingRef.current ||
+      playingMessageIdRef.current ||
+      recognitionActiveRef.current
+    ) {
+      return;
+    }
+
+    const SpeechRecognition = getSpeechRecognitionConstructor();
+    if (!SpeechRecognition) {
+      deactivateVoiceCall();
+      setComposerNotice(
+        "Hands-free voice call currently needs Chrome, Edge, or another browser with speech recognition."
+      );
+      return;
+    }
+
+    const recognition = recognitionRef.current ?? new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = getPreferredRecognitionLanguage();
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      recognitionActiveRef.current = true;
+      setVoicePhase("listening");
+      setComposerNotice(null);
+    };
+
+    recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
+      let finalTranscript = "";
+      let interimTranscript = "";
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result[0]?.transcript?.trim();
+
+        if (!transcript) continue;
+
+        if (result.isFinal) {
+          finalTranscript = `${finalTranscript} ${transcript}`.trim();
+        } else {
+          interimTranscript = `${interimTranscript} ${transcript}`.trim();
+        }
+      }
+
+      setLiveTranscript(interimTranscript);
+
+      if (!finalTranscript) {
+        return;
+      }
+
+      desiredRecognitionStateRef.current = "paused";
+      recognitionActiveRef.current = false;
+      setVoicePhase("thinking");
+      setLiveTranscript("");
+
+      try {
+        recognition.stop();
+      } catch {
+        // Ignore browser state exceptions when a final result lands during teardown.
+      }
+
+      void submitTextMessageRef.current?.(finalTranscript, {
+        inputKind: "speech",
+        meta: "Voice call",
+        preferVoiceReply: true,
+      });
+    };
+
+    recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
+      recognitionActiveRef.current = false;
+      setListeningSeconds(0);
+
+      if (event.error === "aborted") {
+        return;
+      }
+
+      if (event.error === "no-speech") {
+        setLiveTranscript("");
+        return;
+      }
+
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        deactivateVoiceCall();
+      }
+
+      setComposerNotice(formatMicrophoneAccessError(event));
+    };
+
+    recognition.onend = () => {
+      recognitionActiveRef.current = false;
+      setListeningSeconds(0);
+
+      if (
+        voiceModeRef.current &&
+        desiredRecognitionStateRef.current === "listening" &&
+        !sendingRef.current &&
+        !playingMessageIdRef.current
+      ) {
+        scheduleVoiceRecognitionStart();
+        return;
+      }
+
+      if (desiredRecognitionStateRef.current === "off") {
+        setVoicePhase("idle");
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch (error) {
+      const message = (error as Error).message.toLowerCase();
+      if (message.includes("already started")) {
+        return;
+      }
+
+      setComposerNotice(formatMicrophoneAccessError(error));
+    }
+  }, [deactivateVoiceCall, scheduleVoiceRecognitionStart]);
+
+  useEffect(() => {
+    startVoiceRecognitionRef.current = startVoiceRecognition;
+  }, [startVoiceRecognition]);
+
   const handleSpeakMessage = useCallback(
     async (message: Message) => {
       if (!message.text.trim()) return;
 
       if (playingMessageId === message.id) {
         stopPlayback();
+        if (voiceModeRef.current) {
+          desiredRecognitionStateRef.current = "listening";
+          scheduleVoiceRecognitionStart();
+        }
         return;
       }
 
+      const shouldResumeVoiceCall = voiceModeRef.current;
       setComposerNotice(null);
 
+      if (shouldResumeVoiceCall) {
+        desiredRecognitionStateRef.current = "paused";
+        stopVoiceRecognition();
+        setVoicePhase("speaking");
+      }
+
       try {
-        if (message.audioUrl) {
-          await playAudioUrlForMessage(message.id, message.audioUrl);
-          return;
-        }
         if (message.audioUrls?.length) {
           for (const audioUrl of message.audioUrls) {
-            await playAudioUrlForMessage(message.id, audioUrl, true);
+            await playAudioUrlForMessage(message.id, audioUrl, shouldResumeVoiceCall);
           }
+          return;
+        }
+
+        if (message.audioUrl) {
+          await playAudioUrlForMessage(message.id, message.audioUrl, shouldResumeVoiceCall);
           return;
         }
 
@@ -327,13 +611,22 @@ export default function FloatingChat({ content }: FloatingChatProps) {
           audioMimeType: spoken.audioMimeType,
         });
 
-        await playAudioUrlForMessage(message.id, audioUrl);
+        await playAudioUrlForMessage(message.id, audioUrl, shouldResumeVoiceCall);
       } catch (error) {
-        setComposerNotice(formatVoiceRequestError(error as Error));
+        if (!isPlaybackInterrupted(error)) {
+          setComposerNotice(formatVoiceRequestError(error as Error));
+        }
       } finally {
         setSynthesizingMessageId((previous) =>
           previous === message.id ? null : previous
         );
+
+        if (shouldResumeVoiceCall && voiceModeRef.current) {
+          desiredRecognitionStateRef.current = "listening";
+          scheduleVoiceRecognitionStart();
+        } else {
+          setVoicePhase("idle");
+        }
       }
     },
     [
@@ -341,213 +634,46 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       playingMessageId,
       playAudioUrlForMessage,
       rememberAudioUrl,
+      scheduleVoiceRecognitionStart,
       sessionId,
       stopPlayback,
+      stopVoiceRecognition,
       updateMessage,
     ]
   );
-
-  const submitSpeechQuestion = useCallback(
-    async (audioBlob: Blob) => {
-      const placeholderId = addMessage("user", "Transcribing your voice question...", {
-        inputKind: "speech",
-        meta: "Voice input",
-      });
-
-      setSending(true);
-      setComposerNotice(null);
-
-      try {
-        const result = await sendSpeechToSpeech(audioBlob, { context, sessionId });
-
-        updateMessage(placeholderId, {
-          text: result.transcript,
-          meta: "Voice input",
-          inputKind: "speech",
-        });
-
-        let audioUrl = result.audioUrl;
-        let audioMimeType = result.audioMimeType;
-
-        if (!audioUrl) {
-          const spoken = await sendSpeech(result.answer);
-          audioUrl = spoken.audioUrl;
-          audioMimeType = spoken.audioMimeType;
-        }
-
-        const ownedAudioUrl = audioUrl ? rememberAudioUrl(audioUrl) : undefined;
-        const assistantId = addMessage("assistant", result.answer, {
-          context: result.resolvedContext,
-          audioUrl: ownedAudioUrl,
-          audioMimeType,
-          meta: buildMetaLabel({
-            requestedContext: context,
-            resolvedContext: result.resolvedContext,
-            transport: "Voice chat",
-          }),
-        });
-
-        if (ownedAudioUrl) {
-          await playAudioUrlForMessage(assistantId, ownedAudioUrl);
-        }
-      } catch (error) {
-        const voiceError = formatVoiceRequestError(error as Error);
-        updateMessage(placeholderId, {
-          text: "Voice question",
-          supported: false,
-          meta: "Voice input",
-        });
-        addMessage("assistant", `Error: ${voiceError}`, {
-          supported: false,
-        });
-        setComposerNotice(voiceError);
-      } finally {
-        setSending(false);
-      }
-    },
-    [
-      addMessage,
-      context,
-      playAudioUrlForMessage,
-      rememberAudioUrl,
-      sessionId,
-      updateMessage,
-    ]
-  );
-
-  const startRecording = useCallback(async () => {
-    if (sending) return;
-
-    if (
-      typeof navigator === "undefined" ||
-      !navigator.mediaDevices?.getUserMedia ||
-      typeof MediaRecorder === "undefined"
-    ) {
-      setComposerNotice("Voice capture is not supported in this browser.");
-      return;
-    }
-
-    try {
-      if (!window.isSecureContext) {
-        throw new Error(
-          "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again."
-        );
-      }
-
-      setVoiceMode(true);
-      stopPlayback();
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const preferredMimeType = getPreferredRecorderMimeType();
-      const recorder = preferredMimeType
-        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
-        : new MediaRecorder(stream);
-
-      recorderStreamRef.current = stream;
-      recorderRef.current = recorder;
-      recorderChunksRef.current = [];
-      shouldSubmitRecordingRef.current = true;
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recorderChunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        const shouldSubmit = shouldSubmitRecordingRef.current;
-        shouldSubmitRecordingRef.current = false;
-
-        const blob =
-          recorderChunksRef.current.length > 0
-            ? new Blob(recorderChunksRef.current, {
-                type: recorder.mimeType || preferredMimeType || "audio/webm",
-              })
-            : null;
-
-        recorderChunksRef.current = [];
-        recorderRef.current = null;
-        stopRecorderStream();
-
-        if (shouldSubmit && blob && blob.size > 0) {
-          void submitSpeechQuestion(blob);
-        }
-      };
-
-      recorder.start();
-      setRecording(true);
-      setRecordingSeconds(0);
-      setComposerNotice(null);
-    } catch (error) {
-      stopRecorderStream();
-      recorderRef.current = null;
-      setComposerNotice(formatMicrophoneError(error));
-    }
-  }, [sending, stopPlayback, stopRecorderStream, submitSpeechQuestion]);
-
-  const stopRecordingAndSend = useCallback(() => {
-    if (!recorderRef.current) return;
-
-    shouldSubmitRecordingRef.current = true;
-    setRecording(false);
-    setRecordingSeconds(0);
-    recorderRef.current.stop();
-  }, []);
-
-  const clearChat = useCallback(() => {
-    abortRecording();
-    stopPlayback();
-    revokeOwnedAudioUrls();
-    setMessages([createClearedMessage(undefined, content.clearedMessage)]);
-    setInput("");
-    setHasUnread(false);
-    setComposerNotice(null);
-    setSynthesizingMessageId(null);
-    resetTextareaHeight(inputRef.current);
-    inputRef.current?.focus();
-  }, [
-    abortRecording,
-    content.clearedMessage,
-    revokeOwnedAudioUrls,
-    stopPlayback,
-  ]);
-
-  useEffect(() => {
-    if (!open && recording) {
-      abortRecording();
-    }
-  }, [abortRecording, open, recording]);
-
-  useEffect(() => {
-    return () => {
-      abortRecording();
-      stopRecorderStream();
-      stopPlayback();
-      revokeOwnedAudioUrls();
-    };
-  }, [
-    abortRecording,
-    revokeOwnedAudioUrls,
-    stopPlayback,
-    stopRecorderStream,
-  ]);
 
   const submitTextMessage = useCallback(
-    async (rawText: string) => {
+    async (rawText: string, options: SubmitTextMessageOptions = {}) => {
       const text = rawText.trim();
-      if (!text || sending || recording) return;
+      if (!text || sendingRef.current) return;
 
-      setInput("");
+      const inputKind = options.inputKind ?? "text";
+      const shouldUseVoiceReply = options.preferVoiceReply ?? voiceModeRef.current;
+
+      if (voiceModeRef.current) {
+        desiredRecognitionStateRef.current = "paused";
+        stopVoiceRecognition();
+      }
+
+      if (inputKind === "text") {
+        setInput("");
+        resetTextareaHeight(inputRef.current);
+      }
+
       setComposerNotice(null);
-      resetTextareaHeight(inputRef.current);
+      sendingRef.current = true;
       setSending(true);
       stopPlayback();
-      addMessage("user", text, { inputKind: "text" });
+      addMessage("user", text, {
+        inputKind,
+        meta: options.meta,
+      });
 
       try {
-        if (voiceMode) {
+        if (shouldUseVoiceReply) {
           let assistantId: string | null = null;
           const audioUrls: string[] = [];
+          setVoicePhase("thinking");
 
           await streamTextToSpeech(text, { context, sessionId }, async (event) => {
             if (event.type === "answer") {
@@ -557,7 +683,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                 meta: buildMetaLabel({
                   requestedContext: context,
                   resolvedContext: event.resolvedContext,
-                  transport: "Streaming speech",
+                  transport: inputKind === "speech" ? "Voice call" : "Streaming speech",
                   chunksValidated: event.chunksValidated,
                   chunksRetrieved: event.chunksRetrieved,
                 }),
@@ -569,15 +695,20 @@ export default function FloatingChat({ content }: FloatingChatProps) {
               const ownedAudioUrl = rememberAudioUrl(event.audioUrl);
               audioUrls.push(ownedAudioUrl);
 
-              if (assistantId) {
-                updateMessage(assistantId, {
-                  audioUrls: [...audioUrls],
-                  audioMimeType: event.audioMimeType,
-                });
-                await playAudioUrlForMessage(assistantId, ownedAudioUrl, true);
+              if (!assistantId) {
+                return;
               }
+
+              updateMessage(assistantId, {
+                audioUrls: [...audioUrls],
+                audioMimeType: event.audioMimeType,
+              });
+
+              setVoicePhase("speaking");
+              await playAudioUrlForMessage(assistantId, ownedAudioUrl, true);
             }
           });
+
           return;
         }
 
@@ -588,33 +719,89 @@ export default function FloatingChat({ content }: FloatingChatProps) {
           meta: buildMetaLabel({
             requestedContext: context,
             resolvedContext: result.resolvedContext,
-            transport: "Text to text",
+            transport: inputKind === "speech" ? "Voice call" : "Text to text",
             chunksValidated: result.chunksValidated,
             chunksRetrieved: result.chunksRetrieved,
           }),
         });
       } catch (error) {
-        addMessage("assistant", `Error: ${(error as Error).message}`, {
-          supported: false,
-        });
-        setComposerNotice((error as Error).message);
+        if (!isPlaybackInterrupted(error)) {
+          addMessage("assistant", `Error: ${(error as Error).message}`, {
+            supported: false,
+          });
+          setComposerNotice((error as Error).message);
+        }
       } finally {
+        sendingRef.current = false;
         setSending(false);
+
+        if (voiceModeRef.current) {
+          desiredRecognitionStateRef.current = "listening";
+          scheduleVoiceRecognitionStart();
+        } else {
+          setVoicePhase("idle");
+        }
       }
     },
     [
       addMessage,
       context,
       playAudioUrlForMessage,
-      recording,
       rememberAudioUrl,
-      sending,
+      scheduleVoiceRecognitionStart,
       sessionId,
       stopPlayback,
+      stopVoiceRecognition,
       updateMessage,
-      voiceMode,
     ]
   );
+
+  useEffect(() => {
+    submitTextMessageRef.current = submitTextMessage;
+  }, [submitTextMessage]);
+
+  const clearChat = useCallback(() => {
+    deactivateVoiceCall(true);
+    stopPlayback();
+    revokeOwnedAudioUrls();
+    setMessages([createClearedMessage(undefined, content.clearedMessage)]);
+    setInput("");
+    setHasUnread(false);
+    setSynthesizingMessageId(null);
+    resetTextareaHeight(inputRef.current);
+    inputRef.current?.focus();
+  }, [
+    content.clearedMessage,
+    deactivateVoiceCall,
+    revokeOwnedAudioUrls,
+    stopPlayback,
+  ]);
+
+  const toggleVoiceCall = useCallback(() => {
+    if (voiceMode) {
+      deactivateVoiceCall(true);
+      stopPlayback();
+      return;
+    }
+
+    void activateVoiceCall();
+  }, [activateVoiceCall, deactivateVoiceCall, stopPlayback, voiceMode]);
+
+  useEffect(() => {
+    if (!open && voiceModeRef.current) {
+      deactivateVoiceCall();
+      stopPlayback();
+    }
+  }, [deactivateVoiceCall, open, stopPlayback]);
+
+  useEffect(() => {
+    return () => {
+      deactivateVoiceCall();
+      stopPlayback();
+      revokeOwnedAudioUrls();
+      recognitionRef.current = null;
+    };
+  }, [deactivateVoiceCall, revokeOwnedAudioUrls, stopPlayback]);
 
   const handleSend = useCallback(async () => {
     await submitTextMessage(input);
@@ -630,16 +817,29 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     [handleSend]
   );
 
-  const showQuickPrompts = messages.length <= 1 && !sending && !recording;
-  const voiceActivityLabel = recording
-    ? `Listening ${formatRecordingTime(recordingSeconds)}`
+  const showQuickPrompts = messages.length <= 1 && !sending;
+  const statusLabel = voiceMode
+    ? voicePhase === "listening"
+      ? "Listening"
+      : voicePhase === "thinking"
+        ? "Thinking"
+        : voicePhase === "speaking"
+          ? "Speaking"
+          : "Voice call"
+    : content.readyLabel;
+  const voiceActivityLabel = voiceMode
+    ? voicePhase === "listening"
+      ? `Listening ${formatRecordingTime(listeningSeconds)}`
+      : voicePhase === "thinking"
+        ? "Patrick is thinking..."
+        : voicePhase === "speaking"
+          ? "Patrick is speaking..."
+          : "Voice call ready"
     : sending
-      ? "Patrick AI is thinking..."
+      ? "Thinking..."
       : playingMessageId
         ? "Playing Patrick's voice..."
-        : voiceMode
-          ? "Tap the mic and speak naturally."
-          : "Text and voice ready";
+        : "Text and voice ready";
 
   if (pathname?.startsWith("/admin")) {
     return null;
@@ -695,7 +895,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
               <div className="flex gap-2">
                 <span className="chat-status-pill">
                   <Sparkles className="h-3.5 w-3.5 text-sky-300" />
-                  {recording ? "Listening" : voiceMode ? "Voice chat" : content.readyLabel}
+                  {statusLabel}
                 </span>
               </div>
             </div>
@@ -703,15 +903,17 @@ export default function FloatingChat({ content }: FloatingChatProps) {
             <div className="flex items-center gap-1">
               <motion.button
                 whileTap={{ scale: 0.94 }}
-                onClick={toggleVoiceMode}
+                onClick={toggleVoiceCall}
                 className={`chat-toolbar-button h-10 px-3 ${
                   voiceMode ? "chat-toolbar-button-active" : ""
                 }`}
-                aria-label={voiceMode ? "Turn off voice chat" : "Turn on voice chat"}
+                aria-label={voiceMode ? "End voice call" : "Start voice call"}
                 aria-pressed={voiceMode}
               >
                 <PhoneCall className="h-4 w-4" />
-                <span className="hidden text-xs font-medium sm:inline">Voice</span>
+                <span className="hidden text-xs font-medium sm:inline">
+                  {voiceMode ? "On call" : "Call"}
+                </span>
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.94 }}
@@ -775,9 +977,10 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                       Voice features
                     </label>
                     <p className="text-sm leading-6 text-white/58">
-                      Text questions use Hetzner text-to-text by default. Voice chat
-                      uploads microphone audio to speech-to-speech, and voice mode uses
-                      text-to-speech for typed prompts with audio replies.
+                      Voice call mode listens hands-free in the browser, turns
+                      your speech into text, then streams Patrick&apos;s answer and
+                      MP3 voice reply sentence by sentence from the production AI
+                      endpoint.
                     </p>
                   </div>
 
@@ -809,7 +1012,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                     onClick={() => {
                       void submitTextMessage(prompt.prompt);
                     }}
-                    disabled={sending || recording}
+                    disabled={sending}
                     className="chat-chip px-3.5 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Sparkles className="h-3 w-3 text-sky-300" />
@@ -831,18 +1034,14 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                   <div className="flex items-center gap-3">
                     <div
                       className={`chat-voice-orb ${
-                        recording ? "chat-voice-orb-recording" : ""
+                        voicePhase === "listening" ? "chat-voice-orb-recording" : ""
                       }`}
                     >
-                      {recording ? (
-                        <Square className="h-5 w-5" />
-                      ) : (
-                        <Mic className="h-5 w-5" />
-                      )}
+                      <Mic className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-white">
-                        Voice chat with Patrick AI
+                        Voice call with Patrick AI
                       </p>
                       <p className="mt-1 text-xs leading-5 text-white/52">
                         {voiceActivityLabel}
@@ -850,30 +1049,24 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                     </div>
                   </div>
 
+                  <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-3">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-white/35">
+                      Live transcript
+                    </p>
+                    <p className="mt-2 min-h-[2.75rem] text-sm leading-6 text-white/82">
+                      {liveTranscript ||
+                        "Speak naturally. Patrick will answer in voice, then the mic will reopen automatically."}
+                    </p>
+                  </div>
+
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (recording) {
-                          stopRecordingAndSend();
-                        } else {
-                          void startRecording();
-                        }
-                      }}
-                      disabled={sending && !recording}
-                      className="chat-voice-primary-button disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={toggleVoiceCall}
+                      className="chat-voice-primary-button"
                     >
-                      {recording ? "Send voice" : "Tap to talk"}
+                      End call
                     </button>
-                    {recording && (
-                      <button
-                        type="button"
-                        onClick={abortRecording}
-                        className="chat-voice-secondary-button"
-                      >
-                        Cancel
-                      </button>
-                    )}
                   </div>
                 </motion.div>
               )}
@@ -1028,7 +1221,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={sending || recording}
+                  disabled={sending}
                   placeholder={content.composerPlaceholder}
                   rows={1}
                   className="min-h-[48px] max-h-[150px] flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-white outline-none placeholder:text-white/35"
@@ -1038,37 +1231,19 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                 <motion.button
                   type="button"
                   onClick={() => {
-                    if (recording) {
-                      stopRecordingAndSend();
-                    } else {
-                      void startRecording();
-                    }
-                  }}
-                  disabled={sending}
-                  whileHover={{ scale: !sending ? 1.02 : 1 }}
-                  whileTap={{ scale: !sending ? 0.96 : 1 }}
-                  className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30 ${
-                    recording
-                      ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30"
-                      : "bg-white/10 text-white hover:bg-white/16"
-                  }`}
-                  aria-label={recording ? "Stop recording and send" : "Record voice question"}
-                >
-                  {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </motion.button>
-
-                <motion.button
-                  type="button"
-                  onClick={() => {
                     void handleSend();
                   }}
-                  disabled={!input.trim() || sending || recording}
-                  whileHover={{ scale: input.trim() && !sending && !recording ? 1.02 : 1 }}
-                  whileTap={{ scale: input.trim() && !sending && !recording ? 0.96 : 1 }}
+                  disabled={!input.trim() || sending}
+                  whileHover={{ scale: input.trim() && !sending ? 1.02 : 1 }}
+                  whileTap={{ scale: input.trim() && !sending ? 0.96 : 1 }}
                   className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 transition disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
                   aria-label="Send message"
                 >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {sending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </motion.button>
               </div>
 
@@ -1080,9 +1255,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                 >
                   {composerNotice ?? COMPOSER_HINT}
                 </p>
-                <p className="text-[11px] text-white/40">
-                  {voiceActivityLabel}
-                </p>
+                <p className="text-[11px] text-white/40">{voiceActivityLabel}</p>
               </div>
             </div>
           </div>

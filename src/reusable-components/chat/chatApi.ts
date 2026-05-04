@@ -341,7 +341,10 @@ export async function streamTextToSpeech(
 ): Promise<void> {
   const response = await fetch(`${BASE_URL}/text-to-speech/stream`, {
     method: "POST",
-    headers: getJsonHeaders(),
+    headers: {
+      ...getJsonHeaders(),
+      Accept: "application/x-ndjson",
+    },
     body: JSON.stringify(buildChatSpeechPayload(text, options)),
   });
 

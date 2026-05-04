@@ -13,22 +13,20 @@ This website chat now uses the newer AI endpoints with a split transport model:
 - `POST /api/ai/text-to-speech`
   Legacy full-audio JSON flow.
 - `POST /api/ai/text-to-speech/stream`
-  Used when voice mode is active and the user sends a typed prompt. It streams
-  the answer first, then one MP3 payload per sentence.
-- `POST /api/ai/speech-to-speech`
-  Used when the user records a voice question from the chat composer.
+  Used when voice mode is active. It streams the answer first, then one MP3
+  payload per sentence.
 
 ## Reusable structure
 
 - `src/reusable-components/FloatingChat.tsx`
-  Owns the floating chat experience, message rendering, recorder lifecycle, and playback UX.
+  Owns the floating chat experience, message rendering, browser speech-recognition lifecycle, and playback UX.
 - `src/reusable-components/chat/chatApi.ts`
   Centralizes all client-side AI endpoint calls so transport logic is not duplicated in the UI.
 - `src/app/api/ai/[...path]/route.ts`
   Proxies local/development website-origin requests to the Hetzner AI API and
   keeps optional API keys server-side when that runtime path is available.
 - `src/reusable-components/chat/chatAudio.ts`
-  Holds small audio helpers such as recorder MIME selection and recording time formatting.
+  Holds small audio helpers such as browser speech-recognition types, support checks, and timing helpers.
 - `src/reusable-components/chat/chatShared.ts`
   Shared chat types, welcome helpers, context options, and textarea utilities.
 
@@ -38,10 +36,9 @@ This website chat now uses the newer AI endpoints with a split transport model:
 - Typed input in voice mode sends to `text-to-speech/stream`, renders the
   answer, and starts playing each sentence as soon as that sentence audio is
   generated.
-- Voice input records in the browser, uploads to `speech-to-speech`, then renders:
-  - the transcript as the user message
-  - the answer as the assistant message
-  - the returned `audio.base64` as playable audio
+- Hands-free voice call mode uses browser speech recognition for user speech,
+  sends the transcript through `text-to-speech/stream`, and then resumes
+  listening after Patrick's audio reply finishes.
 - Assistant replies can be spoken on demand through the `speech` endpoint.
 
 ## Notes
@@ -53,7 +50,8 @@ This website chat now uses the newer AI endpoints with a split transport model:
   enables API-key auth. Avoid exposing API keys with `NEXT_PUBLIC_` variables.
 - Optional public tuning variables: set `NEXT_PUBLIC_AI_VOICE_SPEED` and
   `NEXT_PUBLIC_AI_VOICE_INSTRUCTIONS` to adjust the speed/style sent with every
-  browser voice request. The default speed is `0.86`.
+  browser voice request. Set `NEXT_PUBLIC_AI_VOICE_INPUT_LANG` to override the
+  browser speech-recognition language. The default speed is `0.86`.
 - Voice playback intentionally does not fall back to the browser speech engine, because that would use the device voice instead of Patrick's backend voice.
-- The current voice routes are request-and-response flows, not true realtime streaming. ChatGPT-style live voice will need a continuous transport layer such as WebSocket or WebRTC on the AI backend.
+- The current voice call is hands-free and turn-based, but it is still not true full-duplex realtime audio. ChatGPT-style live voice with simultaneous streaming both directions will need a continuous transport such as WebSocket or WebRTC on the AI backend.
 - Object URLs created for generated audio are tracked and revoked when the chat clears or unmounts to avoid leaking browser memory.
