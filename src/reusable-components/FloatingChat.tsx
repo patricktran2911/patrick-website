@@ -35,9 +35,8 @@ import type { ChatContent } from "@/lib/site-content-schema";
 import {
   sendSpeech,
   sendSpeechToSpeech,
-  sendTextToSpeech,
   sendTextToText,
-  VOICE_SAMPLE_TEXT,
+  streamTextToSpeech,
 } from "@/reusable-components/chat/chatApi";
 import {
   formatRecordingTime,
@@ -112,7 +111,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   );
   const [composerNotice, setComposerNotice] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
-  const [voiceSampleLoading, setVoiceSampleLoading] = useState(false);
 
   const openRef = useRef(open);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -123,6 +121,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   const shouldSubmitRecordingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const ownedAudioUrlsRef = useRef<Set<string>>(new Set());
+  const playbackStopResolverRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     openRef.current = open;
@@ -191,6 +190,9 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   }, []);
 
   const stopPlayback = useCallback(() => {
+    playbackStopResolverRef.current?.();
+    playbackStopResolverRef.current = null;
+
     const audio = playbackAudioRef.current;
     if (!audio) return;
 
@@ -249,18 +251,29 @@ export default function FloatingChat({ content }: FloatingChatProps) {
   }, [abortRecording, recording]);
 
   const playAudioUrlForMessage = useCallback(
-    async (messageId: string, audioUrl: string) => {
+    async (messageId: string, audioUrl: string, waitForEnd = false) => {
       stopPlayback();
 
       const audio = new Audio(audioUrl);
       playbackAudioRef.current = audio;
       setPlayingMessageId(messageId);
+      let resolveDone: (() => void) | null = null;
+      const donePromise = waitForEnd
+        ? new Promise<void>((resolve) => {
+            resolveDone = resolve;
+            playbackStopResolverRef.current = resolve;
+          })
+        : null;
 
       const cleanup = () => {
         if (playbackAudioRef.current === audio) {
           playbackAudioRef.current = null;
           setPlayingMessageId(null);
         }
+        if (playbackStopResolverRef.current === resolveDone) {
+          playbackStopResolverRef.current = null;
+        }
+        resolveDone?.();
       };
 
       audio.onended = cleanup;
@@ -268,6 +281,9 @@ export default function FloatingChat({ content }: FloatingChatProps) {
 
       try {
         await audio.play();
+        if (donePromise) {
+          await donePromise;
+        }
       } catch (error) {
         cleanup();
         throw error;
@@ -290,6 +306,12 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       try {
         if (message.audioUrl) {
           await playAudioUrlForMessage(message.id, message.audioUrl);
+          return;
+        }
+        if (message.audioUrls?.length) {
+          for (const audioUrl of message.audioUrls) {
+            await playAudioUrlForMessage(message.id, audioUrl, true);
+          }
           return;
         }
 
@@ -324,41 +346,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       updateMessage,
     ]
   );
-
-  const playVoiceSample = useCallback(async () => {
-    if (voiceSampleLoading || sending || recording) return;
-
-    setVoiceMode(true);
-    setComposerNotice(null);
-    setVoiceSampleLoading(true);
-    stopPlayback();
-
-    try {
-      const spoken = await sendSpeech(VOICE_SAMPLE_TEXT, { context, sessionId });
-      const audioUrl = rememberAudioUrl(spoken.audioUrl);
-      const assistantId = addMessage("assistant", VOICE_SAMPLE_TEXT, {
-        audioUrl,
-        audioMimeType: spoken.audioMimeType,
-        meta: "Voice sample",
-      });
-
-      await playAudioUrlForMessage(assistantId, audioUrl);
-    } catch (error) {
-      setComposerNotice(formatVoiceRequestError(error as Error));
-    } finally {
-      setVoiceSampleLoading(false);
-    }
-  }, [
-    addMessage,
-    context,
-    playAudioUrlForMessage,
-    recording,
-    rememberAudioUrl,
-    sending,
-    sessionId,
-    stopPlayback,
-    voiceSampleLoading,
-  ]);
 
   const submitSpeechQuestion = useCallback(
     async (audioBlob: Blob) => {
@@ -516,7 +503,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
     setHasUnread(false);
     setComposerNotice(null);
     setSynthesizingMessageId(null);
-    setVoiceSampleLoading(false);
     resetTextareaHeight(inputRef.current);
     inputRef.current?.focus();
   }, [
@@ -559,36 +545,54 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       addMessage("user", text, { inputKind: "text" });
 
       try {
-        const result = voiceMode
-          ? await sendTextToSpeech(text, { context, sessionId })
-          : await sendTextToText(text, { context, sessionId });
-        const audioUrl =
-          voiceMode && "audioUrl" in result && typeof result.audioUrl === "string"
-            ? rememberAudioUrl(result.audioUrl)
-            : undefined;
-        const audioMimeType =
-          voiceMode &&
-          "audioMimeType" in result &&
-          typeof result.audioMimeType === "string"
-            ? result.audioMimeType
-            : undefined;
+        if (voiceMode) {
+          let assistantId: string | null = null;
+          const audioUrls: string[] = [];
 
-        const assistantId = addMessage("assistant", result.answer, {
+          await streamTextToSpeech(text, { context, sessionId }, async (event) => {
+            if (event.type === "answer") {
+              assistantId = addMessage("assistant", event.answer, {
+                context: event.resolvedContext,
+                audioUrls,
+                meta: buildMetaLabel({
+                  requestedContext: context,
+                  resolvedContext: event.resolvedContext,
+                  transport: "Streaming speech",
+                  chunksValidated: event.chunksValidated,
+                  chunksRetrieved: event.chunksRetrieved,
+                }),
+              });
+              return;
+            }
+
+            if (event.type === "audio") {
+              const ownedAudioUrl = rememberAudioUrl(event.audioUrl);
+              audioUrls.push(ownedAudioUrl);
+
+              if (assistantId) {
+                updateMessage(assistantId, {
+                  audioUrls: [...audioUrls],
+                  audioMimeType: event.audioMimeType,
+                });
+                await playAudioUrlForMessage(assistantId, ownedAudioUrl, true);
+              }
+            }
+          });
+          return;
+        }
+
+        const result = await sendTextToText(text, { context, sessionId });
+
+        addMessage("assistant", result.answer, {
           context: result.resolvedContext,
-          audioUrl,
-          audioMimeType,
           meta: buildMetaLabel({
             requestedContext: context,
             resolvedContext: result.resolvedContext,
-            transport: voiceMode ? "Text to speech" : "Text to text",
+            transport: "Text to text",
             chunksValidated: result.chunksValidated,
             chunksRetrieved: result.chunksRetrieved,
           }),
         });
-
-        if (voiceMode && audioUrl) {
-          await playAudioUrlForMessage(assistantId, audioUrl);
-        }
       } catch (error) {
         addMessage("assistant", `Error: ${(error as Error).message}`, {
           supported: false,
@@ -607,6 +611,7 @@ export default function FloatingChat({ content }: FloatingChatProps) {
       sending,
       sessionId,
       stopPlayback,
+      updateMessage,
       voiceMode,
     ]
   );
@@ -869,21 +874,6 @@ export default function FloatingChat({ content }: FloatingChatProps) {
                         Cancel
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void playVoiceSample();
-                      }}
-                      disabled={voiceSampleLoading || sending || recording}
-                      className="chat-voice-secondary-button disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {voiceSampleLoading ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Volume2 className="h-3.5 w-3.5" />
-                      )}
-                      Voice sample
-                    </button>
                   </div>
                 </motion.div>
               )}

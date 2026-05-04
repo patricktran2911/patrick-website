@@ -11,7 +11,10 @@ This website chat now uses the newer AI endpoints with a split transport model:
 - `POST /api/ai/speech`
   Used when the user taps the speaker button on an assistant message.
 - `POST /api/ai/text-to-speech`
-  Used when voice mode is active and the user sends a typed prompt.
+  Legacy full-audio JSON flow.
+- `POST /api/ai/text-to-speech/stream`
+  Used when voice mode is active and the user sends a typed prompt. It streams
+  the answer first, then one MP3 payload per sentence.
 - `POST /api/ai/speech-to-speech`
   Used when the user records a voice question from the chat composer.
 
@@ -32,16 +35,14 @@ This website chat now uses the newer AI endpoints with a split transport model:
 ## Behavior rules
 
 - Typed input sends to `text-to-text` and renders a text answer in chat.
-- Typed input in voice mode sends to `text-to-speech`, renders the answer, and
-  auto-plays the returned audio.
+- Typed input in voice mode sends to `text-to-speech/stream`, renders the
+  answer, and starts playing each sentence as soon as that sentence audio is
+  generated.
 - Voice input records in the browser, uploads to `speech-to-speech`, then renders:
   - the transcript as the user message
   - the answer as the assistant message
   - the returned `audio.base64` as playable audio
 - Assistant replies can be spoken on demand through the `speech` endpoint.
-- The voice panel includes a `Voice sample` action that asks the backend to
-  generate a real MP3 through `POST /api/ai/speech`; this checks the same
-  frontend delivery path used by assistant playback.
 
 ## Notes
 

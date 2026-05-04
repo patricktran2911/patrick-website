@@ -32,6 +32,7 @@ export interface Message {
   supported?: boolean;
   meta?: string;
   audioUrl?: string;
+  audioUrls?: string[];
   audioMimeType?: string;
   inputKind?: InputKind;
 }

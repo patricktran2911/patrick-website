@@ -36,13 +36,29 @@ export interface SpeechToSpeechResult {
   audioMimeType?: string;
 }
 
+export type TextToSpeechStreamEvent =
+  | {
+      type: "answer";
+      answer: string;
+      resolvedContext: string;
+      chunksValidated?: string | number;
+      chunksRetrieved?: string | number;
+    }
+  | {
+      type: "audio";
+      index: number;
+      text: string;
+      audioUrl: string;
+      audioMimeType: string;
+    }
+  | {
+      type: "done";
+    };
+
 const AUDIO_RESPONSE_FORMAT = "mp3";
 const DEFAULT_VOICE_SPEED = 0.86;
 const DEFAULT_VOICE_INSTRUCTIONS =
   "Speak in natural, warm conversational English at a lightly brisk pace. Keep every word clear and easy to understand, with a calm Vietnamese-English accent.";
-
-export const VOICE_SAMPLE_TEXT =
-  "Hi, this is Patrick's AI voice test. I will speak a little faster, but still clearly for the website chat.";
 
 function getVoiceSpeed() {
   const configured = Number(process.env.NEXT_PUBLIC_AI_VOICE_SPEED);
@@ -150,6 +166,23 @@ function createAudioUrlFromBase64(base64: string, mimeType: string) {
   const binary = atob(normalized);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+}
+
+function createAudioResultFromPayload(payload: unknown): SpeechAudioResult | undefined {
+  const audioBase64 = pickString(payload, [
+    ["audio", "base64"],
+    ["data", "audio", "base64"],
+    ["audio_base64"],
+    ["base64"],
+  ]);
+
+  if (!audioBase64) return undefined;
+
+  const audioMimeType = getAudioMimeType(payload);
+  return {
+    audioUrl: createAudioUrlFromBase64(audioBase64, audioMimeType),
+    audioMimeType,
+  };
 }
 
 async function parseResponsePayload(response: Response): Promise<ParsedPayload> {
@@ -296,11 +329,99 @@ export async function sendTextToSpeech(
 
   return {
     ...textResult,
-    audioUrl: audioBase64
-      ? createAudioUrlFromBase64(audioBase64, audioMimeType)
-      : undefined,
+    audioUrl: audioBase64 ? createAudioUrlFromBase64(audioBase64, audioMimeType) : undefined,
     audioMimeType,
   };
+}
+
+export async function streamTextToSpeech(
+  text: string,
+  options: ChatRequestOptions,
+  onEvent: (event: TextToSpeechStreamEvent) => void | Promise<void>
+): Promise<void> {
+  const response = await fetch(`${BASE_URL}/text-to-speech/stream`, {
+    method: "POST",
+    headers: getJsonHeaders(),
+    body: JSON.stringify(buildChatSpeechPayload(text, options)),
+  });
+
+  if (!response.ok || !response.body) {
+    const payload = await parseResponsePayload(response);
+    throw new Error(extractErrorMessage(payload.data, response.status));
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const handleLine = async (line: string) => {
+    if (!line.trim()) return;
+
+    const payload = JSON.parse(line) as Record<string, unknown>;
+    if (payload.type === "answer") {
+      await onEvent({
+        type: "answer",
+        answer:
+          pickString(payload, [
+            ["answer"],
+            ["data", "answer"],
+          ]) || "",
+        resolvedContext:
+          pickString(payload, [
+            ["data", "context"],
+            ["meta", "context"],
+            ["context"],
+          ]) || options.context,
+        chunksValidated: pickNumberLike(payload, [
+          ["meta", "chunks_validated"],
+          ["chunks_validated"],
+        ]),
+        chunksRetrieved: pickNumberLike(payload, [
+          ["meta", "chunks_retrieved"],
+          ["chunks_retrieved"],
+        ]),
+      });
+      return;
+    }
+
+    if (payload.type === "audio") {
+      const audio = createAudioResultFromPayload(payload);
+      if (!audio) return;
+
+      await onEvent({
+        type: "audio",
+        index:
+          typeof payload.index === "number"
+            ? payload.index
+            : Number(payload.index ?? 0),
+        text: typeof payload.text === "string" ? payload.text : "",
+        audioUrl: audio.audioUrl,
+        audioMimeType: audio.audioMimeType,
+      });
+      return;
+    }
+
+    if (payload.type === "done") {
+      await onEvent({ type: "done" });
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      await handleLine(line);
+    }
+
+    if (done) break;
+  }
+
+  if (buffer.trim()) {
+    await handleLine(buffer);
+  }
 }
 
 function getAudioMimeType(payload: unknown) {
