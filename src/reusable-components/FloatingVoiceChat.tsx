@@ -20,6 +20,7 @@ import {
 } from "@/reusable-components/chat/chatShared";
 import {
   getVoiceServiceAvailability,
+  sendSpeechToText,
   streamVoiceReply,
   type VoiceReplyStreamEvent,
 } from "@/reusable-components/chat/chatApi";
@@ -29,6 +30,7 @@ import {
   type BrowserSpeechRecognitionEvent,
   formatRecordingTime,
   getPreferredRecognitionLanguage,
+  getPreferredRecorderMimeType,
   getSpeechRecognitionConstructor,
   getSpeechRecognitionErrorMessage,
   isSpeechRecognitionSupported,
@@ -42,6 +44,7 @@ import type { VoiceChatContent } from "@/lib/site-content-schema";
 
 type VoicePhase = "idle" | "connecting" | "listening" | "thinking" | "speaking";
 type RecognitionDesiredState = "off" | "listening" | "paused";
+type VoiceInputMode = "recognition" | "recorder";
 
 type QueuedAudioChunk = {
   index: number;
@@ -53,6 +56,15 @@ type QueuedAudioChunk = {
 interface FloatingVoiceChatProps {
   content: VoiceChatContent;
 }
+
+type WindowWithWebkitAudioContext = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
+const RECORDER_SILENCE_MS = 1100;
+const RECORDER_MIN_RECORDING_MS = 900;
+const RECORDER_MAX_RECORDING_MS = 14000;
+const RECORDER_VOICE_THRESHOLD = 0.035;
 
 function renderMeta(meta?: string) {
   if (!meta) return null;
@@ -85,6 +97,11 @@ function formatMicrophoneAccessError(error: unknown) {
     return "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again.";
   }
 
+  const rawMessage = (error as Error)?.message ?? "";
+  if (rawMessage.includes("not allowed by the user agent or the platform")) {
+    return "Safari or iOS blocked microphone access in this context. Open the HTTPS site directly in Safari, allow Microphone for this website, then start the call again.";
+  }
+
   const recognitionMessage = getSpeechRecognitionErrorMessage(error);
   if (recognitionMessage) {
     return recognitionMessage;
@@ -104,7 +121,7 @@ function formatMicrophoneAccessError(error: unknown) {
     }
   }
 
-  return (error as Error)?.message || "Unable to access the microphone.";
+  return rawMessage || "Unable to access the microphone.";
 }
 
 function getStatusLabel(content: VoiceChatContent, phase: VoicePhase) {
@@ -120,6 +137,36 @@ function getStatusLabel(content: VoiceChatContent, phase: VoicePhase) {
     default:
       return content.readyLabel;
   }
+}
+
+function isLikelyIosSafari() {
+  if (typeof navigator === "undefined") return false;
+
+  const agent = navigator.userAgent;
+  const isIos = /iPad|iPhone|iPod/.test(agent);
+  const isSafari = /Safari/.test(agent) && !/CriOS|FxiOS|EdgiOS/.test(agent);
+
+  return isIos && isSafari;
+}
+
+function isMediaRecorderSupported() {
+  return typeof MediaRecorder !== "undefined";
+}
+
+function getPreferredVoiceInputMode(): VoiceInputMode | null {
+  if (isLikelyIosSafari() && isMediaRecorderSupported()) {
+    return "recorder";
+  }
+
+  if (isSpeechRecognitionSupported()) {
+    return "recognition";
+  }
+
+  if (isMediaRecorderSupported()) {
+    return "recorder";
+  }
+
+  return null;
 }
 
 export default function FloatingVoiceChat({
@@ -139,9 +186,18 @@ export default function FloatingVoiceChat({
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const recognitionActiveRef = useRef(false);
   const desiredRecognitionStateRef = useRef<RecognitionDesiredState>("off");
+  const voiceInputModeRef = useRef<VoiceInputMode>("recognition");
   const recognitionStartTimerRef = useRef<number | null>(null);
   const startVoiceRecognitionRef = useRef<(() => Promise<void>) | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaRecorderChunksRef = useRef<Blob[]>([]);
+  const recorderIntervalRef = useRef<number | null>(null);
+  const recorderStartedAtRef = useRef(0);
+  const recorderHeardSpeechRef = useRef(false);
+  const recorderLastVoiceAtRef = useRef(0);
+  const recorderAudioContextRef = useRef<AudioContext | null>(null);
   const turnIdRef = useRef(0);
   const queuedAudioRef = useRef<Map<number, QueuedAudioChunk>>(new Map());
   const nextAudioIndexRef = useRef(0);
@@ -277,7 +333,28 @@ export default function FloatingVoiceChat({
     [clearScheduledRecognitionStart]
   );
 
-  const ensureMicrophoneReady = useCallback(async () => {
+  const clearRecorderTimer = useCallback(() => {
+    if (recorderIntervalRef.current !== null) {
+      window.clearInterval(recorderIntervalRef.current);
+      recorderIntervalRef.current = null;
+    }
+  }, []);
+
+  const closeRecorderAudioContext = useCallback(() => {
+    const audioContext = recorderAudioContextRef.current;
+    recorderAudioContextRef.current = null;
+
+    if (audioContext && audioContext.state !== "closed") {
+      void audioContext.close();
+    }
+  }, []);
+
+  const releaseMicrophoneStream = useCallback(() => {
+    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
+    microphoneStreamRef.current = null;
+  }, []);
+
+  const requestMicrophoneStream = useCallback(async () => {
     if (
       typeof navigator === "undefined" ||
       !navigator.mediaDevices?.getUserMedia
@@ -291,9 +368,44 @@ export default function FloatingVoiceChat({
       );
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((track) => track.stop());
+    const existingStream = microphoneStreamRef.current;
+    if (existingStream?.getAudioTracks().some((track) => track.readyState === "live")) {
+      return existingStream;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    microphoneStreamRef.current = stream;
+    return stream;
   }, []);
+
+  const stopRecorderCapture = useCallback(
+    (mode: "stop" | "abort" = "stop") => {
+      clearRecorderTimer();
+      closeRecorderAudioContext();
+
+      const recorder = mediaRecorderRef.current;
+      if (!recorder) return;
+
+      if (mode === "abort") {
+        mediaRecorderChunksRef.current = [];
+      }
+
+      try {
+        if (recorder.state !== "inactive") {
+          recorder.stop();
+        }
+      } catch {
+        // Safari can throw if the recorder has already stopped itself.
+      }
+    },
+    [clearRecorderTimer, closeRecorderAudioContext]
+  );
 
   const deactivateCall = useCallback(
     (clearNotice = false) => {
@@ -304,6 +416,8 @@ export default function FloatingVoiceChat({
       setLiveTranscript("");
       setListeningSeconds(0);
       stopVoiceRecognition("abort");
+      stopRecorderCapture("abort");
+      releaseMicrophoneStream();
       stopPlayback();
       resetQueuedAudio();
 
@@ -311,7 +425,13 @@ export default function FloatingVoiceChat({
         setCallNotice(null);
       }
     },
-    [resetQueuedAudio, stopPlayback, stopVoiceRecognition]
+    [
+      releaseMicrophoneStream,
+      resetQueuedAudio,
+      stopPlayback,
+      stopRecorderCapture,
+      stopVoiceRecognition,
+    ]
   );
 
   const maybeResumeListening = useCallback(() => {
@@ -550,6 +670,173 @@ export default function FloatingVoiceChat({
     ]
   );
 
+  const startRecorderListening = useCallback(async () => {
+    if (
+      !callActiveRef.current ||
+      desiredRecognitionStateRef.current !== "listening" ||
+      recognitionActiveRef.current ||
+      playingMessageIdRef.current
+    ) {
+      return;
+    }
+
+    if (!isMediaRecorderSupported()) {
+      deactivateCall();
+      setCallNotice(
+        "This browser cannot record microphone audio for voice chat."
+      );
+      return;
+    }
+
+    try {
+      const stream = await requestMicrophoneStream();
+      const mimeType = getPreferredRecorderMimeType();
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
+      const AudioContextConstructor =
+        window.AudioContext ??
+        (window as WindowWithWebkitAudioContext).webkitAudioContext;
+
+      mediaRecorderRef.current = recorder;
+      mediaRecorderChunksRef.current = [];
+      recorderStartedAtRef.current = performance.now();
+      recorderLastVoiceAtRef.current = recorderStartedAtRef.current;
+      recorderHeardSpeechRef.current = false;
+      recognitionActiveRef.current = true;
+      setVoicePhase("listening");
+      setCallNotice(null);
+
+      let analyser: AnalyserNode | null = null;
+      let sampleBuffer: Uint8Array | null = null;
+
+      if (AudioContextConstructor) {
+        const audioContext = new AudioContextConstructor();
+        if (audioContext.state === "suspended") {
+          await audioContext.resume().catch(() => undefined);
+        }
+        const source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 1024;
+        source.connect(analyser);
+        sampleBuffer = new Uint8Array(analyser.fftSize);
+        recorderAudioContextRef.current = audioContext;
+      }
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          mediaRecorderChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        clearRecorderTimer();
+        closeRecorderAudioContext();
+        recognitionActiveRef.current = false;
+        setListeningSeconds(0);
+
+        const chunks = mediaRecorderChunksRef.current;
+        mediaRecorderChunksRef.current = [];
+
+        if (
+          desiredRecognitionStateRef.current === "off" ||
+          !callActiveRef.current ||
+          !recorderHeardSpeechRef.current
+        ) {
+          if (
+            callActiveRef.current &&
+            desiredRecognitionStateRef.current === "listening"
+          ) {
+            scheduleVoiceRecognitionStart(180);
+          }
+          return;
+        }
+
+        const audioBlob = new Blob(chunks, {
+          type: recorder.mimeType || "audio/webm",
+        });
+
+        if (audioBlob.size < 900) {
+          scheduleVoiceRecognitionStart(180);
+          return;
+        }
+
+        desiredRecognitionStateRef.current = "paused";
+        setVoicePhase("thinking");
+        setLiveTranscript("");
+
+        void (async () => {
+          try {
+            const result = await sendSpeechToText(audioBlob);
+            await handleVoiceTurn(result.transcript);
+          } catch (error) {
+            setCallNotice(formatVoiceRequestError(error as Error));
+            maybeResumeListening();
+          }
+        })();
+      };
+
+      recorder.onerror = () => {
+        recognitionActiveRef.current = false;
+        setCallNotice("The browser stopped microphone recording unexpectedly.");
+        maybeResumeListening();
+      };
+
+      recorder.start(250);
+
+      recorderIntervalRef.current = window.setInterval(() => {
+        const now = performance.now();
+
+        if (analyser && sampleBuffer) {
+          analyser.getByteTimeDomainData(sampleBuffer);
+          let total = 0;
+
+          for (const value of sampleBuffer) {
+            const normalized = (value - 128) / 128;
+            total += normalized * normalized;
+          }
+
+          const volume = Math.sqrt(total / sampleBuffer.length);
+          if (volume > RECORDER_VOICE_THRESHOLD) {
+            recorderHeardSpeechRef.current = true;
+            recorderLastVoiceAtRef.current = now;
+            setLiveTranscript("Listening...");
+          }
+        }
+
+        const recordingDuration = now - recorderStartedAtRef.current;
+        const silenceDuration = now - recorderLastVoiceAtRef.current;
+        const shouldStopForSilence =
+          recorderHeardSpeechRef.current &&
+          recordingDuration > RECORDER_MIN_RECORDING_MS &&
+          silenceDuration > RECORDER_SILENCE_MS;
+        const shouldStopForMaxDuration =
+          recordingDuration > RECORDER_MAX_RECORDING_MS;
+
+        if (
+          (shouldStopForSilence || shouldStopForMaxDuration) &&
+          recorder.state !== "inactive"
+        ) {
+          recorder.stop();
+        }
+      }, 120);
+    } catch (error) {
+      recognitionActiveRef.current = false;
+      setCallNotice(formatMicrophoneAccessError(error));
+      deactivateCall();
+    }
+  }, [
+    clearRecorderTimer,
+    closeRecorderAudioContext,
+    deactivateCall,
+    handleVoiceTurn,
+    maybeResumeListening,
+    playingMessageIdRef,
+    requestMicrophoneStream,
+    scheduleVoiceRecognitionStart,
+  ]);
+
   const startVoiceRecognition = useCallback(async () => {
     if (
       !callActiveRef.current ||
@@ -557,6 +844,11 @@ export default function FloatingVoiceChat({
       recognitionActiveRef.current ||
       playingMessageIdRef.current
     ) {
+      return;
+    }
+
+    if (voiceInputModeRef.current === "recorder") {
+      await startRecorderListening();
       return;
     }
 
@@ -672,6 +964,7 @@ export default function FloatingVoiceChat({
     handleVoiceTurn,
     playingMessageIdRef,
     scheduleVoiceRecognitionStart,
+    startRecorderListening,
   ]);
 
   useEffect(() => {
@@ -679,19 +972,27 @@ export default function FloatingVoiceChat({
   }, [startVoiceRecognition]);
 
   const activateCall = useCallback(async () => {
-    if (!isSpeechRecognitionSupported()) {
+    const inputMode = getPreferredVoiceInputMode();
+
+    if (!inputMode) {
       setCallNotice(
-        "Hands-free voice call currently needs Chrome, Edge, or another browser with speech recognition."
+        "Voice chat needs microphone recording support in this browser."
       );
       return;
     }
 
     try {
       setVoicePhase("connecting");
-      await ensureMicrophoneReady();
+      const microphoneStream = await requestMicrophoneStream();
       const voiceAvailability = await getVoiceServiceAvailability();
       if (!voiceAvailability.available) {
         throw new Error(voiceAvailability.message);
+      }
+
+      voiceInputModeRef.current = inputMode;
+      if (inputMode === "recognition") {
+        microphoneStream.getTracks().forEach((track) => track.stop());
+        microphoneStreamRef.current = null;
       }
 
       stopPlayback();
@@ -708,7 +1009,7 @@ export default function FloatingVoiceChat({
     }
   }, [
     deactivateCall,
-    ensureMicrophoneReady,
+    requestMicrophoneStream,
     scheduleVoiceRecognitionStart,
     stopPlayback,
   ]);
@@ -833,67 +1134,118 @@ export default function FloatingVoiceChat({
           </div>
 
           <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="p-4">
-              <div className="chat-voice-card rounded-[26px] p-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`chat-voice-orb ${
-                      voicePhase === "listening" ? "chat-voice-orb-recording" : ""
-                    }`}
-                  >
-                    {voicePhase === "thinking" ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : voicePhase === "speaking" ? (
-                      <Volume2 className="h-5 w-5" />
-                    ) : (
-                      <Mic className="h-5 w-5" />
+            <AnimatePresence initial={false} mode="wait">
+              {callActive ? (
+                <motion.div
+                  key="compact-call"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="overflow-hidden px-4 pt-4"
+                >
+                  <div className="chat-voice-card rounded-[22px] p-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${
+                          voicePhase === "listening"
+                            ? "chat-voice-orb-recording"
+                            : "bg-gradient-to-br from-[var(--chat-accent-start)] to-[var(--chat-accent-end)]"
+                        }`}
+                      >
+                        {voicePhase === "thinking" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : voicePhase === "speaking" ? (
+                          <Volume2 className="h-4 w-4" />
+                        ) : (
+                          <Mic className="h-4 w-4" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {voiceActivityLabel}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-white/48">
+                          {liveTranscript || callNotice || content.panelDescription}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={toggleCall}
+                        className="chat-voice-secondary-button min-h-9 px-3"
+                      >
+                        {content.endCallLabel}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="full-call"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="p-4"
+                >
+                  <div className="chat-voice-card rounded-[26px] p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="chat-voice-orb">
+                        {voicePhase === "connecting" ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Mic className="h-5 w-5" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white">
+                          {content.panelDescription}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-white/52">
+                          {voiceActivityLabel}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-3">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-white/35">
+                        {content.transcriptLabel}
+                      </p>
+                      <p className="mt-2 min-h-[2.75rem] text-sm leading-6 text-white/82">
+                        {liveTranscript || content.transcriptPlaceholder}
+                      </p>
+                    </div>
+
+                    {callNotice && (
+                      <div className="mt-4 rounded-[20px] border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
+                        {callNotice}
+                      </div>
                     )}
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={toggleCall}
+                        className="chat-voice-primary-button"
+                      >
+                        {content.startCallLabel}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={clearHistory}
+                        className="chat-voice-secondary-button"
+                      >
+                        {content.clearLabel}
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-white">
-                      {content.panelDescription}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-white/52">
-                      {voiceActivityLabel}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-3">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-white/35">
-                    {content.transcriptLabel}
-                  </p>
-                  <p className="mt-2 min-h-[2.75rem] text-sm leading-6 text-white/82">
-                    {liveTranscript || content.transcriptPlaceholder}
-                  </p>
-                </div>
-
-                {callNotice && (
-                  <div className="mt-4 rounded-[20px] border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
-                    {callNotice}
-                  </div>
-                )}
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleCall}
-                    className="chat-voice-primary-button"
-                  >
-                    {callActive ? content.endCallLabel : content.startCallLabel}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={clearHistory}
-                    className="chat-voice-secondary-button"
-                  >
-                    {content.clearLabel}
-                  </button>
-                </div>
-              </div>
-            </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div
               ref={chatRef}

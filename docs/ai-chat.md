@@ -54,6 +54,8 @@ like this:
 - The voice widget opens from its own floating icon above the text chatbot.
 - Voice turns use browser speech recognition for the user's speech, then call
   `text-to-speech/stream`.
+- On iPhone Safari, the widget prefers a recorder-based input path and sends
+  the captured turn to `speech-to-text` before calling `text-to-speech/stream`.
 - `answer_delta` events append into the transcript live.
 - `audio` events are converted from base64 into MP3 object URLs, queued by
   `index`, and played in order as each sentence arrives.
@@ -69,6 +71,9 @@ like this:
   current Amplify hosting path does not reliably proxy streaming AI requests.
 - Voice activation still preflights `/api/ai/voice/local-health` before opening
   the hands-free loop.
+- `getUserMedia` still requires a secure browser context and an allowed site
+  microphone permission. If iOS blocks the microphone before recording starts,
+  the UI surfaces a Safari-specific permission message.
 - Patrick voice playback intentionally does not fall back to the browser speech
   engine, because that would use the device voice instead of Patrick's backend
   voice.

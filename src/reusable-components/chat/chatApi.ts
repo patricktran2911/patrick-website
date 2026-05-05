@@ -36,6 +36,10 @@ export interface SpeechToSpeechResult {
   audioMimeType?: string;
 }
 
+export interface SpeechToTextResult {
+  transcript: string;
+}
+
 export type VoiceReplyStreamEvent =
   | {
       type: "meta";
@@ -176,6 +180,15 @@ function buildChatSpeechPayload(text: string, options: ChatRequestOptions) {
     response_format: AUDIO_RESPONSE_FORMAT,
     speed: getVoiceSpeed(),
     ...(instructions ? { instructions } : {}),
+  };
+}
+
+function buildVoiceStreamPayload(text: string, options: ChatRequestOptions) {
+  return {
+    message: text,
+    context: options.context,
+    session_id: options.sessionId,
+    response_format: AUDIO_RESPONSE_FORMAT,
   };
 }
 
@@ -384,7 +397,7 @@ export async function streamVoiceReply(
       ...getJsonHeaders(),
       Accept: "application/x-ndjson",
     },
-    body: JSON.stringify(buildChatSpeechPayload(text, options)),
+    body: JSON.stringify(buildVoiceStreamPayload(text, options)),
   });
 
   if (!response.ok || !response.body) {
@@ -481,6 +494,36 @@ export async function streamVoiceReply(
   if (!doneSeen) {
     await onEvent({ type: "done", answer: "" });
   }
+}
+
+export async function sendSpeechToText(audioBlob: Blob): Promise<SpeechToTextResult> {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, getAudioUploadName(audioBlob));
+
+  const response = await fetch(`${BASE_URL}/speech-to-text`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const payload = await parseResponsePayload(response);
+
+  if (!response.ok) {
+    throw new Error(extractErrorMessage(payload.data, response.status));
+  }
+
+  const transcript = pickString(payload.data, [
+    ["transcript"],
+    ["text"],
+    ["data", "transcript"],
+    ["data", "text"],
+    ["result", "transcript"],
+  ]);
+
+  if (!transcript) {
+    throw new Error("The AI service returned an empty transcript.");
+  }
+
+  return { transcript };
 }
 
 export async function getVoiceServiceAvailability() {
