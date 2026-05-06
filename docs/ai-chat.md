@@ -78,6 +78,8 @@ like this:
 - `getUserMedia` still requires a secure browser context and an allowed site
   microphone permission. If iOS blocks the microphone before recording starts,
   the UI surfaces a Safari-specific permission message.
+- The recorder path requests `audio: true` first because iOS Safari can reject
+  richer audio constraints before the backend ever receives the recording.
 - Patrick voice playback intentionally does not fall back to the browser speech
   engine, because that would use the device voice instead of Patrick's backend
   voice.

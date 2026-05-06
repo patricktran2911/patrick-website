@@ -95,13 +95,16 @@ function formatVoiceRequestError(error: Error) {
 }
 
 function formatMicrophoneAccessError(error: unknown) {
+  const currentOrigin =
+    typeof window === "undefined" ? "this site" : window.location.origin;
+
   if (typeof window !== "undefined" && !window.isSecureContext) {
     return "Microphone access needs HTTPS or localhost. Open the site in a secure URL and try again.";
   }
 
   const rawMessage = (error as Error)?.message ?? "";
   if (rawMessage.includes("not allowed by the user agent or the platform")) {
-    return "Safari or iOS blocked microphone access in this context. Open the HTTPS site directly in Safari, allow Microphone for this website, then start the call again.";
+    return `Safari or iOS blocked microphone access for ${currentOrigin}. Open this site directly in Safari, then allow Microphone in Safari website settings and try again.`;
   }
 
   const recognitionMessage = getSpeechRecognitionErrorMessage(error);
@@ -111,7 +114,7 @@ function formatMicrophoneAccessError(error: unknown) {
 
   if (error instanceof DOMException) {
     if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-      return "Microphone permission was denied. Allow microphone access in the browser address bar, then try again.";
+      return `Microphone permission was denied for ${currentOrigin}. Allow microphone access in Safari website settings, then try again.`;
     }
 
     if (error.name === "NotFoundError") {
@@ -143,6 +146,24 @@ function getStatusLabel(content: VoiceChatContent, phase: VoicePhase) {
 
 function isMediaRecorderSupported() {
   return typeof MediaRecorder !== "undefined";
+}
+
+async function requestBrowserMicrophoneStream() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (firstError) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    } catch {
+      throw firstError;
+    }
+  }
 }
 
 function getPreferredVoiceInputMode(): VoiceInputMode | null {
@@ -365,13 +386,7 @@ export default function FloatingVoiceChat({
       return existingStream;
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    const stream = await requestBrowserMicrophoneStream();
     microphoneStreamRef.current = stream;
     return stream;
   }, []);
