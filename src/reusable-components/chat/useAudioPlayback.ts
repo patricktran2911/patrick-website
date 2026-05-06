@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export const PLAYBACK_INTERRUPTED_ERROR = "PLAYBACK_INTERRUPTED";
+const SILENT_WAV_DATA_URL =
+  "data:audio/wav;base64," +
+  "UklGRiQFAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
 
 export function isPlaybackInterrupted(error: unknown) {
   return error instanceof Error && error.message === PLAYBACK_INTERRUPTED_ERROR;
@@ -16,6 +19,7 @@ export function useAudioPlayback() {
   const playbackRunIdRef = useRef(0);
   const ownedAudioUrlsRef = useRef<Set<string>>(new Set());
   const playingMessageIdRef = useRef<string | null>(null);
+  const playbackPrimedRef = useRef(false);
 
   useEffect(() => {
     playingMessageIdRef.current = playingMessageId;
@@ -25,6 +29,46 @@ export function useAudioPlayback() {
     ownedAudioUrlsRef.current.add(audioUrl);
     return audioUrl;
   }, []);
+
+  const getPlaybackAudio = useCallback(() => {
+    if (!playbackAudioRef.current) {
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.setAttribute("playsinline", "true");
+      playbackAudioRef.current = audio;
+    }
+
+    return playbackAudioRef.current;
+  }, []);
+
+  const primePlayback = useCallback(() => {
+    if (playbackPrimedRef.current) return;
+
+    const audio = getPlaybackAudio();
+    audio.pause();
+    audio.onended = null;
+    audio.onerror = null;
+    audio.src = SILENT_WAV_DATA_URL;
+    audio.load();
+
+    void audio
+      .play()
+      .then(() => {
+        if (audio.src === SILENT_WAV_DATA_URL) {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.removeAttribute("src");
+          audio.load();
+        }
+        playbackPrimedRef.current = true;
+      })
+      .catch(() => {
+        if (audio.src === SILENT_WAV_DATA_URL) {
+          audio.removeAttribute("src");
+          audio.load();
+        }
+      });
+  }, [getPlaybackAudio]);
 
   const stopPlayback = useCallback(() => {
     playbackRunIdRef.current += 1;
@@ -40,7 +84,8 @@ export function useAudioPlayback() {
 
     audio.pause();
     audio.currentTime = 0;
-    playbackAudioRef.current = null;
+    audio.onended = null;
+    audio.onerror = null;
     setPlayingMessageId(null);
   }, []);
 
@@ -54,8 +99,9 @@ export function useAudioPlayback() {
       stopPlayback();
 
       const runId = playbackRunIdRef.current;
-      const audio = new Audio(audioUrl);
-      playbackAudioRef.current = audio;
+      const audio = getPlaybackAudio();
+      audio.src = audioUrl;
+      audio.load();
       playingMessageIdRef.current = messageId;
       setPlayingMessageId(messageId);
 
@@ -69,7 +115,6 @@ export function useAudioPlayback() {
 
       const cleanup = () => {
         if (playbackAudioRef.current === audio) {
-          playbackAudioRef.current = null;
           playingMessageIdRef.current = null;
           setPlayingMessageId(null);
         }
@@ -95,7 +140,7 @@ export function useAudioPlayback() {
         throw error;
       }
     },
-    [stopPlayback]
+    [getPlaybackAudio, stopPlayback]
   );
 
   useEffect(() => {
@@ -109,6 +154,7 @@ export function useAudioPlayback() {
     playingMessageId,
     playingMessageIdRef,
     playAudioUrlForMessage,
+    primePlayback,
     rememberAudioUrl,
     revokeOwnedAudioUrls,
     stopPlayback,

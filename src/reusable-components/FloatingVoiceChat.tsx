@@ -219,6 +219,7 @@ export default function FloatingVoiceChat({
     playingMessageId,
     playingMessageIdRef,
     playAudioUrlForMessage,
+    primePlayback,
     rememberAudioUrl,
     revokeOwnedAudioUrls,
     stopPlayback,
@@ -1026,6 +1027,8 @@ export default function FloatingVoiceChat({
   }, [startVoiceRecognition]);
 
   const activateCall = useCallback(async () => {
+    primePlayback();
+
     const inputMode = getPreferredVoiceInputMode();
 
     if (!inputMode) {
@@ -1063,6 +1066,7 @@ export default function FloatingVoiceChat({
     }
   }, [
     deactivateCall,
+    primePlayback,
     requestMicrophoneStream,
     scheduleVoiceRecognitionStart,
     stopPlayback,
