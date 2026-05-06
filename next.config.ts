@@ -2,12 +2,43 @@ import type { NextConfig } from "next";
 
 const distDir = process.env.NEXT_DIST_DIR;
 
+/** Origins the browser may fetch (voice + chat use NEXT_PUBLIC_AI_DIRECT_URL in production). */
+function collectAiConnectOrigins() {
+  const candidates = [
+    process.env.NEXT_PUBLIC_AI_DIRECT_URL,
+    process.env.NEXT_PUBLIC_AI_API_URL,
+    process.env.AI_API_URL,
+  ];
+
+  const origins = new Set<string>();
+  for (const raw of candidates) {
+    if (!raw?.trim()) continue;
+    try {
+      origins.add(new URL(raw.trim()).origin);
+    } catch {
+      /* ignore invalid env URLs */
+    }
+  }
+
+  return [...origins];
+}
+
 const nextConfig: NextConfig = {
   ...(distDir ? { distDir } : {}),
   turbopack: {
     resolveExtensions: [".mdx", ".tsx", ".ts", ".jsx", ".js", ".mjs", ".json"],
   },
   async headers() {
+    const aiOrigins = collectAiConnectOrigins();
+    const connectSrc = [
+      "'self'",
+      "https://api.emailjs.com",
+      "https://challenges.cloudflare.com",
+      "https://ai-dev.patrickcs-web.com",
+      ...aiOrigins,
+      "https://www.youtube.com",
+      "https://www.youtube-nocookie.com",
+    ];
     const csp = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com",
@@ -16,7 +47,7 @@ const nextConfig: NextConfig = {
       "media-src 'self' blob: data:",
       "font-src 'self'",
       "frame-src https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://drive.google.com https://docs.google.com",
-      "connect-src 'self' https://api.emailjs.com https://challenges.cloudflare.com https://ai-dev.patrickcs-web.com https://www.youtube.com https://www.youtube-nocookie.com",
+      `connect-src ${[...new Set(connectSrc)].join(" ")}`,
       "object-src 'none'",
       "base-uri 'self'",
     ].join("; ");
