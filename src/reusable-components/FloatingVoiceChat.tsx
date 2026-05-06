@@ -45,6 +45,11 @@ import type { VoiceChatContent } from "@/lib/site-content-schema";
 type VoicePhase = "idle" | "connecting" | "listening" | "thinking" | "speaking";
 type RecognitionDesiredState = "off" | "listening" | "paused";
 type VoiceInputMode = "recognition" | "recorder";
+type VoiceAvailabilityStatus =
+  | "unknown"
+  | "checking"
+  | "available"
+  | "unavailable";
 
 type QueuedAudioChunk = {
   index: number;
@@ -191,6 +196,9 @@ export default function FloatingVoiceChat({
   const [liveTranscript, setLiveTranscript] = useState("");
   const [listeningSeconds, setListeningSeconds] = useState(0);
   const [sessionId] = useState(`voice-session-${uid()}`);
+  const [voiceAvailabilityStatus, setVoiceAvailabilityStatus] =
+    useState<VoiceAvailabilityStatus>("unknown");
+  const [voiceAvailabilityMessage, setVoiceAvailabilityMessage] = useState("");
 
   const callActiveRef = useRef(callActive);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -247,6 +255,40 @@ export default function FloatingVoiceChat({
 
     return () => window.clearInterval(interval);
   }, [voicePhase]);
+
+  const refreshVoiceAvailability = useCallback(async () => {
+    setVoiceAvailabilityStatus("checking");
+    const voiceAvailability = await getVoiceServiceAvailability();
+    setVoiceAvailabilityStatus(
+      voiceAvailability.available ? "available" : "unavailable"
+    );
+    setVoiceAvailabilityMessage(voiceAvailability.message);
+    return voiceAvailability;
+  }, []);
+
+  useEffect(() => {
+    if (pathname !== "/") {
+      setVoiceAvailabilityStatus("unknown");
+      setVoiceAvailabilityMessage("");
+      return;
+    }
+
+    let cancelled = false;
+    setVoiceAvailabilityStatus("checking");
+    setVoiceAvailabilityMessage("");
+
+    void getVoiceServiceAvailability().then((voiceAvailability) => {
+      if (cancelled) return;
+      setVoiceAvailabilityStatus(
+        voiceAvailability.available ? "available" : "unavailable"
+      );
+      setVoiceAvailabilityMessage(voiceAvailability.message);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   const addMessage = useCallback((message: Message) => {
     setMessages((previous) => [...previous, message]);
@@ -1039,12 +1081,21 @@ export default function FloatingVoiceChat({
     }
 
     try {
+      const voiceAvailability =
+        voiceAvailabilityStatus === "available"
+          ? { available: true, message: "" }
+          : await refreshVoiceAvailability();
+
+      if (!voiceAvailability.available) {
+        setCallNotice(
+          voiceAvailability.message ||
+            "Patrick Voice is offline right now because the PC voice server is not reachable."
+        );
+        return;
+      }
+
       const microphoneStream = await requestMicrophoneStream();
       setVoicePhase("connecting");
-      const voiceAvailability = await getVoiceServiceAvailability();
-      if (!voiceAvailability.available) {
-        throw new Error(voiceAvailability.message);
-      }
 
       voiceInputModeRef.current = inputMode;
       if (inputMode === "recognition") {
@@ -1067,9 +1118,11 @@ export default function FloatingVoiceChat({
   }, [
     deactivateCall,
     primePlayback,
+    refreshVoiceAvailability,
     requestMicrophoneStream,
     scheduleVoiceRecognitionStart,
     stopPlayback,
+    voiceAvailabilityStatus,
   ]);
 
   const toggleCall = useCallback(() => {
@@ -1112,6 +1165,20 @@ export default function FloatingVoiceChat({
           : voicePhase === "speaking"
             ? "Patrick is speaking..."
             : content.panelDescription;
+  const isHomePage = pathname === "/";
+  const voiceAvailabilityLabel =
+    voiceAvailabilityStatus === "checking"
+      ? "Checking Patrick Voice..."
+      : voiceAvailabilityStatus === "available"
+        ? "Patrick Voice online"
+        : voiceAvailabilityStatus === "unavailable"
+          ? "Patrick Voice offline"
+          : "";
+  const startCallDisabled =
+    !callActive &&
+    isHomePage &&
+    (voiceAvailabilityStatus === "checking" ||
+      voiceAvailabilityStatus === "unavailable");
 
   if (pathname?.startsWith("/admin")) {
     return null;
@@ -1168,6 +1235,28 @@ export default function FloatingVoiceChat({
                   <Sparkles className="h-3.5 w-3.5 text-sky-300" />
                   {getStatusLabel(content, voicePhase)}
                 </span>
+                {isHomePage && voiceAvailabilityLabel && (
+                  <span
+                    className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+                      voiceAvailabilityStatus === "available"
+                        ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                        : voiceAvailabilityStatus === "unavailable"
+                          ? "border-rose-300/20 bg-rose-400/10 text-rose-100"
+                          : "border-white/10 bg-white/[0.05] text-white/50"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        voiceAvailabilityStatus === "available"
+                          ? "bg-emerald-300"
+                          : voiceAvailabilityStatus === "unavailable"
+                            ? "bg-rose-300"
+                            : "bg-white/35"
+                      }`}
+                    />
+                    {voiceAvailabilityLabel}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1283,14 +1372,39 @@ export default function FloatingVoiceChat({
                       </div>
                     )}
 
+                    {!callNotice &&
+                      isHomePage &&
+                      voiceAvailabilityStatus === "unavailable" && (
+                        <div className="mt-4 rounded-[20px] border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
+                          {voiceAvailabilityMessage ||
+                            "Patrick Voice is offline right now because the PC voice server is not reachable."}
+                        </div>
+                      )}
+
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={toggleCall}
-                        className="chat-voice-primary-button"
+                        disabled={startCallDisabled}
+                        className="chat-voice-primary-button disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {content.startCallLabel}
+                        {voiceAvailabilityStatus === "checking"
+                          ? "Checking voice..."
+                          : content.startCallLabel}
                       </button>
+
+                      {isHomePage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void refreshVoiceAvailability();
+                          }}
+                          disabled={voiceAvailabilityStatus === "checking"}
+                          className="chat-voice-secondary-button disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Check again
+                        </button>
+                      )}
 
                       <button
                         type="button"

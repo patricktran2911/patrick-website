@@ -583,21 +583,52 @@ export async function sendSpeechToText(audioBlob: Blob): Promise<SpeechToTextRes
 }
 
 export async function getVoiceServiceAvailability() {
-  const response = await fetch(`${BASE_URL}/voice/local-health`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}/voice/local-health`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    return {
+      available: false,
+      message: "Patrick Voice is offline right now because the PC voice server is not reachable.",
+    };
+  }
+
+  const payload = await parseResponsePayload(response);
 
   if (response.ok) {
+    const localVoiceEnabled = pickBoolean(
+      payload.data,
+      [["enabled"], ["data", "enabled"]],
+      true
+    );
+    const healthSucceeded = pickBoolean(
+      payload.data,
+      [["success"], ["data", "success"]],
+      true
+    );
+    const provider = pickString(payload.data, [["provider"], ["data", "provider"]]);
+
+    if (!localVoiceEnabled || !healthSucceeded) {
+      return {
+        available: false,
+        message:
+          provider && provider !== "local"
+            ? `Patrick Voice is offline right now. Current voice provider is ${provider}, not the PC voice server.`
+            : "Patrick Voice is offline right now because the PC voice server is not reachable.",
+      };
+    }
+
     return {
       available: true,
       message: "",
     };
   }
 
-  const payload = await parseResponsePayload(response);
   return {
     available: false,
     message: extractErrorMessage(payload.data, response.status),
