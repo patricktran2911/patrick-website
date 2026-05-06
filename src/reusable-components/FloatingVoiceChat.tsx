@@ -66,6 +66,7 @@ type WindowWithWebkitAudioContext = Window & {
 const RECORDER_SILENCE_MS = 1200;
 const RECORDER_MIN_RECORDING_MS = 900;
 const RECORDER_MAX_RECORDING_MS = 14000;
+const RECORDER_NO_METER_TURN_MS = 5200;
 const RECORDER_VOICE_THRESHOLD = 0.018;
 
 function renderMeta(meta?: string) {
@@ -145,7 +146,7 @@ function getStatusLabel(content: VoiceChatContent, phase: VoicePhase) {
 }
 
 function isMediaRecorderSupported() {
-  return typeof MediaRecorder !== "undefined";
+  return typeof MediaRecorder === "function";
 }
 
 async function requestBrowserMicrophoneStream() {
@@ -173,10 +174,6 @@ function getPreferredVoiceInputMode(): VoiceInputMode | null {
 
   if (isSpeechRecognitionSupported()) {
     return "recognition";
-  }
-
-  if (isMediaRecorderSupported()) {
-    return "recorder";
   }
 
   return null;
@@ -723,10 +720,18 @@ export default function FloatingVoiceChat({
     try {
       const stream = await requestMicrophoneStream();
       const mimeType = getPreferredRecorderMimeType();
-      const recorder = new MediaRecorder(
-        stream,
-        mimeType ? { mimeType } : undefined
-      );
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(
+          stream,
+          mimeType ? { mimeType } : undefined
+        );
+      } catch (error) {
+        if (!mimeType) {
+          throw error;
+        }
+        recorder = new MediaRecorder(stream);
+      }
       const AudioContextConstructor =
         window.AudioContext ??
         (window as WindowWithWebkitAudioContext).webkitAudioContext;
@@ -744,16 +749,29 @@ export default function FloatingVoiceChat({
       let sampleBuffer: Uint8Array | null = null;
 
       if (AudioContextConstructor) {
-        const audioContext = new AudioContextConstructor();
-        if (audioContext.state === "suspended") {
-          await audioContext.resume().catch(() => undefined);
+        let audioContext: AudioContext | null = null;
+        try {
+          audioContext = new AudioContextConstructor();
+          if (audioContext.state === "suspended") {
+            await audioContext.resume().catch(() => undefined);
+          }
+          const source = audioContext.createMediaStreamSource(stream);
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 1024;
+          source.connect(analyser);
+          sampleBuffer = new Uint8Array(analyser.fftSize);
+          recorderAudioContextRef.current = audioContext;
+        } catch {
+          analyser = null;
+          sampleBuffer = null;
+          if (audioContext && audioContext.state !== "closed") {
+            void audioContext.close();
+          }
         }
-        const source = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 1024;
-        source.connect(analyser);
-        sampleBuffer = new Uint8Array(analyser.fftSize);
-        recorderAudioContextRef.current = audioContext;
+      }
+
+      if (!analyser) {
+        setLiveTranscript("Listening...");
       }
 
       recorder.ondataavailable = (event) => {
@@ -847,7 +865,8 @@ export default function FloatingVoiceChat({
           recordingDuration > RECORDER_MIN_RECORDING_MS &&
           silenceDuration > RECORDER_SILENCE_MS;
         const shouldStopForMaxDuration =
-          recordingDuration > RECORDER_MAX_RECORDING_MS;
+          recordingDuration >
+          (analyser ? RECORDER_MAX_RECORDING_MS : RECORDER_NO_METER_TURN_MS);
 
         if (
           (shouldStopForSilence || shouldStopForMaxDuration) &&
@@ -1017,8 +1036,8 @@ export default function FloatingVoiceChat({
     }
 
     try {
-      setVoicePhase("connecting");
       const microphoneStream = await requestMicrophoneStream();
+      setVoicePhase("connecting");
       const voiceAvailability = await getVoiceServiceAvailability();
       if (!voiceAvailability.available) {
         throw new Error(voiceAvailability.message);

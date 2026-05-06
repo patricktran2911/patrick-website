@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const distDir = process.env.NEXT_DIST_DIR;
+const siteMicrophoneOrigins = [
+  "https://patrickcs-web.com",
+  "https://www.patrickcs-web.com",
+];
 
 /** Origins the browser may fetch (voice + chat use NEXT_PUBLIC_AI_DIRECT_URL in production). */
 function collectAiConnectOrigins() {
@@ -62,7 +66,13 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(self), geolocation=()",
+            value: `camera=(), microphone=(self ${siteMicrophoneOrigins
+              .map((origin) => `"${origin}"`)
+              .join(" ")}), geolocation=()`,
+          },
+          {
+            key: "Feature-Policy",
+            value: `microphone 'self' ${siteMicrophoneOrigins.join(" ")}`,
           },
           { key: "Content-Security-Policy", value: csp },
         ],
