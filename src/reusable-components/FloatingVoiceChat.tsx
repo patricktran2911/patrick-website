@@ -63,10 +63,10 @@ type WindowWithWebkitAudioContext = Window & {
   webkitAudioContext?: typeof AudioContext;
 };
 
-const RECORDER_SILENCE_MS = 1100;
+const RECORDER_SILENCE_MS = 1200;
 const RECORDER_MIN_RECORDING_MS = 900;
 const RECORDER_MAX_RECORDING_MS = 14000;
-const RECORDER_VOICE_THRESHOLD = 0.035;
+const RECORDER_VOICE_THRESHOLD = 0.018;
 
 function renderMeta(meta?: string) {
   if (!meta) return null;
@@ -141,22 +141,12 @@ function getStatusLabel(content: VoiceChatContent, phase: VoicePhase) {
   }
 }
 
-function isLikelyIosSafari() {
-  if (typeof navigator === "undefined") return false;
-
-  const agent = navigator.userAgent;
-  const isIos = /iPad|iPhone|iPod/.test(agent);
-  const isSafari = /Safari/.test(agent) && !/CriOS|FxiOS|EdgiOS/.test(agent);
-
-  return isIos && isSafari;
-}
-
 function isMediaRecorderSupported() {
   return typeof MediaRecorder !== "undefined";
 }
 
 function getPreferredVoiceInputMode(): VoiceInputMode | null {
-  if (isLikelyIosSafari() && isMediaRecorderSupported()) {
+  if (isMediaRecorderSupported()) {
     return "recorder";
   }
 
@@ -768,15 +758,8 @@ export default function FloatingVoiceChat({
 
         if (
           desiredRecognitionStateRef.current === "off" ||
-          !callActiveRef.current ||
-          !recorderHeardSpeechRef.current
+          !callActiveRef.current
         ) {
-          if (
-            callActiveRef.current &&
-            desiredRecognitionStateRef.current === "listening"
-          ) {
-            scheduleVoiceRecognitionStart(180);
-          }
           return;
         }
 
@@ -791,14 +774,24 @@ export default function FloatingVoiceChat({
 
         desiredRecognitionStateRef.current = "paused";
         setVoicePhase("thinking");
-        setLiveTranscript("");
+        setLiveTranscript(
+          recorderHeardSpeechRef.current
+            ? ""
+            : "Checking the recording with Patrick's voice server..."
+        );
 
         void (async () => {
           try {
             const result = await sendSpeechToText(audioBlob);
             await handleVoiceTurn(result.transcript);
           } catch (error) {
-            setCallNotice(formatVoiceRequestError(error as Error));
+            const message = (error as Error).message;
+            if (
+              !message.includes("empty transcript") &&
+              !message.includes("No transcript")
+            ) {
+              setCallNotice(formatVoiceRequestError(error as Error));
+            }
             maybeResumeListening();
           }
         })();
