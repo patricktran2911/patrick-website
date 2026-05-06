@@ -54,17 +54,23 @@ export type VoiceReplyStreamEvent =
       type: "sentence";
       index: number;
       text: string;
+      sentences: string[];
     }
   | {
       type: "audio";
       index: number;
       text: string;
+      sentences: string[];
       audioUrl: string;
       audioMimeType: string;
+      audioBytes?: number;
     }
   | {
       type: "done";
       answer: string;
+      resolvedContext: string;
+      success: boolean;
+      supported: boolean;
     };
 
 const AUDIO_RESPONSE_FORMAT = "mp3";
@@ -120,6 +126,39 @@ function pickNumberLike(payload: unknown, paths: string[][]) {
   }
 
   return undefined;
+}
+
+function pickBoolean(payload: unknown, paths: string[][], fallback: boolean) {
+  for (const path of paths) {
+    const value = getNestedValue(payload, path);
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+
+  return fallback;
+}
+
+function pickStringArray(payload: unknown, paths: string[][]) {
+  for (const path of paths) {
+    const value = getNestedValue(payload, path);
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string");
+    }
+  }
+
+  return [];
+}
+
+function pickRawString(payload: unknown, paths: string[][]) {
+  for (const path of paths) {
+    const value = getNestedValue(payload, path);
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+
+  return "";
 }
 
 function getJsonHeaders(): Record<string, string> {
@@ -431,7 +470,7 @@ export async function streamVoiceReply(
     if (payload.type === "answer_delta") {
       await onEvent({
         type: "answer_delta",
-        text: pickString(payload, [["text"], ["delta"], ["data", "text"]]),
+        text: pickRawString(payload, [["text"], ["delta"], ["data", "text"]]),
       });
       return;
     }
@@ -444,6 +483,7 @@ export async function streamVoiceReply(
             ? payload.index
             : Number(payload.index ?? 0),
         text: typeof payload.text === "string" ? payload.text : "",
+        sentences: pickStringArray(payload, [["sentences"], ["data", "sentences"]]),
       });
       return;
     }
@@ -459,8 +499,13 @@ export async function streamVoiceReply(
             ? payload.index
             : Number(payload.index ?? 0),
         text: typeof payload.text === "string" ? payload.text : "",
+        sentences: pickStringArray(payload, [["sentences"], ["data", "sentences"]]),
         audioUrl: audio.audioUrl,
         audioMimeType: audio.audioMimeType,
+        audioBytes:
+          typeof getNestedValue(payload, ["audio", "bytes"]) === "number"
+            ? (getNestedValue(payload, ["audio", "bytes"]) as number)
+            : undefined,
       });
       return;
     }
@@ -470,6 +515,11 @@ export async function streamVoiceReply(
       await onEvent({
         type: "done",
         answer: pickString(payload, [["answer"], ["data", "answer"]]),
+        resolvedContext:
+          pickString(payload, [["context"], ["data", "context"], ["meta", "context"]]) ||
+          options.context,
+        success: pickBoolean(payload, [["success"], ["data", "success"]], true),
+        supported: pickBoolean(payload, [["supported"], ["data", "supported"]], true),
       });
     }
   };
@@ -492,7 +542,13 @@ export async function streamVoiceReply(
   }
 
   if (!doneSeen) {
-    await onEvent({ type: "done", answer: "" });
+    await onEvent({
+      type: "done",
+      answer: "",
+      resolvedContext: options.context,
+      success: true,
+      supported: true,
+    });
   }
 }
 

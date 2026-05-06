@@ -28,11 +28,13 @@ like this:
 - `answer_delta`
   Appends text into the assistant transcript as it is generated.
 - `sentence`
-  Announces sentence boundaries and indexes.
+  Announces sentence boundaries, indexes, and any short-sentence batches.
 - `audio`
-  Carries one MP3 chunk per sentence in `audio.base64`.
+  Carries one MP3 chunk per sentence batch in `audio.base64`, plus byte and
+  MIME metadata.
 - `done`
-  Finalizes the assistant answer text for the turn.
+  Finalizes the assistant answer text, support state, success state, and
+  resolved context for the turn.
 
 ## Reusable structure
 
@@ -59,6 +61,8 @@ like this:
 - `answer_delta` events append into the transcript live.
 - `audio` events are converted from base64 into MP3 object URLs, queued by
   `index`, and played in order as each sentence arrives.
+- `done.context` updates the final assistant metadata so `auto` reflects the
+  backend's routed context, such as `profile`, `projects`, or `portfolio`.
 - If the stream finishes without audio, the transcript remains visible and the
   UI shows a Patrick-voice unavailable notice instead of trying to play a bad
   source.

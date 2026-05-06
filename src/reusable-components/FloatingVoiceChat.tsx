@@ -49,8 +49,10 @@ type VoiceInputMode = "recognition" | "recorder";
 type QueuedAudioChunk = {
   index: number;
   text: string;
+  sentences: string[];
   audioUrl: string;
   audioMimeType: string;
+  audioBytes?: number;
 };
 
 interface FloatingVoiceChatProps {
@@ -599,6 +601,7 @@ export default function FloatingVoiceChat({
             if (event.type === "done") {
               streamDoneRef.current = true;
               finalAnswer = event.answer.trim();
+              resolvedContext = event.resolvedContext || resolvedContext;
 
               if (finalAnswer) {
                 updateMessage(ensureAssistantMessage(), {
@@ -609,7 +612,31 @@ export default function FloatingVoiceChat({
                     resolvedContext,
                     transport: "Voice call",
                   }),
+                  supported: event.success && event.supported,
                 });
+              }
+
+              if (!event.success || !event.supported) {
+                setCallNotice(
+                  event.supported
+                    ? "Patrick voice could not finish this answer."
+                    : "Patrick AI could not support that voice question."
+                );
+
+                if (!finalAnswer) {
+                  updateMessage(ensureAssistantMessage(), {
+                    text: event.supported
+                      ? "Patrick voice could not finish this answer."
+                      : "Patrick AI could not support that voice question.",
+                    context: resolvedContext,
+                    supported: false,
+                    meta: buildMetaLabel({
+                      requestedContext: "auto",
+                      resolvedContext,
+                      transport: "Voice call",
+                    }),
+                  });
+                }
               }
 
               if (
@@ -646,7 +673,7 @@ export default function FloatingVoiceChat({
             text:
               finalAnswer ||
               `Error: ${formatVoiceRequestError(error as Error)}`,
-            supported: finalAnswer.length === 0,
+            supported: finalAnswer.length > 0,
           });
           setCallNotice(formatVoiceRequestError(error as Error));
         }
